@@ -1,0 +1,21 @@
+[workspace]
+members = ["crates/nxc", "crates/nxc-cli", "xtask"]
+resolver = "3"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+license = "AGPL-3.0-only WITH romic-exception"
+repository = "https://github.com/jbboehr/nxc"
+publish = false
+
+[workspace.dependencies]
+chumsky = { version = "0.13", features = ["pratt"] }
+clap = { version = "4.6", features = ["derive"] }
+logos = "0.16"
+nxc = { path = "crates/nxc" }
+rnix = "0.14"
+rowan = "0.17"
+
+[workspace.lints.rust]
+unsafe_code = "forbid"

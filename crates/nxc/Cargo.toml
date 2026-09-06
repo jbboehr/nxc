@@ -1,0 +1,17 @@
+[package]
+name = "nxc"
+description = "A C/Rust-flavored concrete syntax for Nix"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[dependencies]
+chumsky.workspace = true
+logos.workspace = true
+rnix.workspace = true
+rowan.workspace = true
+
+[lints]
+workspace = true

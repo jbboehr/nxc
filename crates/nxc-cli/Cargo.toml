@@ -1,0 +1,19 @@
+[package]
+name = "nxc-cli"
+description = "Command-line frontend for nxc"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "nxc"
+path = "src/main.rs"
+
+[dependencies]
+clap.workspace = true
+nxc.workspace = true
+
+[lints]
+workspace = true
