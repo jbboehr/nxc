@@ -56,25 +56,7 @@ impl Expression {
                     .map(|item| item.lower())
                     .collect::<Result<_, _>>()?,
             )),
-            K::StringExpr => {
-                let mut parts = Vec::new();
-                for part in self.0.children() {
-                    match part.kind() {
-                        K::StringText => ir::push_string_literal(
-                            &mut parts,
-                            crate::string::decode(&part.text().to_string()).map_err(error)?,
-                        ),
-                        K::StringInterpolation => parts.push(StringPart::Interpolation(
-                            part.children()
-                                .find_map(Self::cast)
-                                .ok_or_else(|| error("missing interpolation expression"))?
-                                .lower()?,
-                        )),
-                        _ => return Err(error("cannot lower an erroneous string part")),
-                    }
-                }
-                Ok(Expr::String(parts))
-            }
+            K::StringExpr => lower_string(&self.0),
             K::AttrSetExpr => Ok(Expr::AttrSet {
                 recursive: self
                     .0
@@ -168,6 +150,31 @@ impl Expression {
             _ => Err(error("cannot lower an erroneous expression")),
         }
     }
+}
+
+fn lower_string(node: &SyntaxNode) -> Result<Expr, Diagnostic> {
+    let range = node.text_range();
+    let error = |message| {
+        Diagnostic::new(
+            usize::from(range.start())..usize::from(range.end()),
+            message,
+        )
+    };
+    let indented = node.first_token().is_some_and(|token| token.text() == "''");
+    let mut parts = Vec::new();
+    for part in node.children() {
+        parts.push(match part.kind() {
+            K::StringText => StringPart::Literal(part.text().to_string()),
+            K::StringInterpolation => StringPart::Interpolation(
+                part.children()
+                    .find_map(Expression::cast)
+                    .ok_or_else(|| error("missing interpolation expression"))?
+                    .lower()?,
+            ),
+            _ => return Err(error("cannot lower an erroneous string part")),
+        });
+    }
+    crate::string::lower(parts, indented).map_err(error)
 }
 
 fn lower_path(node: &SyntaxNode) -> Result<Vec<String>, Diagnostic> {

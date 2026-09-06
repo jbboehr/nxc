@@ -328,36 +328,37 @@ fn interpolation_retains_nix_string_context() {
     if !nix_available() {
         return;
     }
-    let source = r#""a${x}b""#;
-    let converted = nxc::emit::nxc(&nix::import(source).unwrap()).unwrap();
-    let generated = nix::emit(&parse_nxc(&converted).unwrap()).unwrap();
-    for value in [source, generated.as_str()] {
-        let expression = format!(
-            r#"
+    for source in [r#""a${x}b""#, "''a${x}b''", "''\n  a${x}b''"] {
+        let converted = nxc::emit::nxc(&nix::import(source).unwrap()).unwrap();
+        let generated = nix::emit(&parse_nxc(&converted).unwrap()).unwrap();
+        for value in [source, generated.as_str()] {
+            let expression = format!(
+                r#"
             let x = builtins.appendContext "payload" {{
                 "/nix/store/00000000000000000000000000000000-fixture" = {{ path = true; }};
             }}; value = {value};
             in builtins.getContext value == builtins.getContext x && value == "apayloadb"
         "#
-        );
-        let result = Command::new("nix-instantiate")
-            .args([
-                "--store",
-                "dummy://",
-                "--eval",
-                "--strict",
-                "--json",
-                "--expr",
-                &expression,
-            ])
-            .output()
-            .unwrap();
-        assert!(
-            result.status.success(),
-            "{}",
-            String::from_utf8_lossy(&result.stderr)
-        );
-        assert_eq!(String::from_utf8(result.stdout).unwrap().trim(), "true");
+            );
+            let result = Command::new("nix-instantiate")
+                .args([
+                    "--store",
+                    "dummy://",
+                    "--eval",
+                    "--strict",
+                    "--json",
+                    "--expr",
+                    &expression,
+                ])
+                .output()
+                .unwrap();
+            assert!(
+                result.status.success(),
+                "{}",
+                String::from_utf8_lossy(&result.stderr)
+            );
+            assert_eq!(String::from_utf8(result.stdout).unwrap().trim(), "true");
+        }
     }
 }
 

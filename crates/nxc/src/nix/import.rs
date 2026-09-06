@@ -180,27 +180,7 @@ fn lower(node: ast::Expr, depth: usize) -> Result<Expr, Diagnostic> {
             argument: Box::new(child(apply.argument())?),
         }),
         ast::Expr::List(list) => lower_list(list, depth),
-        ast::Expr::Str(string) => {
-            if !syntax(&string)
-                .first_token()
-                .is_some_and(|token| token.text() == "\"")
-            {
-                return Err(error("only double-quoted strings are supported yet"));
-            }
-            let mut parts = Vec::new();
-            for part in string.parts() {
-                match part {
-                    InterpolPart::Literal(text) => ir::push_string_literal(
-                        &mut parts,
-                        crate::string::decode(text.syntax().text()).map_err(error)?,
-                    ),
-                    InterpolPart::Interpolation(value) => {
-                        parts.push(StringPart::Interpolation(child(value.expr())?));
-                    }
-                }
-            }
-            Ok(Expr::String(parts))
-        }
+        ast::Expr::Str(string) => lower_string(string, depth),
         ast::Expr::AttrSet(set) => Ok(Expr::AttrSet {
             recursive: set.rec_token().is_some(),
             bindings: set
@@ -303,6 +283,32 @@ fn lower(node: ast::Expr, depth: usize) -> Result<Expr, Diagnostic> {
             syntax(&other).kind()
         ))),
     }
+}
+
+fn lower_string(string: ast::Str, depth: usize) -> Result<Expr, Diagnostic> {
+    let range = syntax(&string).text_range();
+    let error = |message| {
+        Diagnostic::new(
+            usize::from(range.start())..usize::from(range.end()),
+            message,
+        )
+    };
+    let indented = syntax(&string)
+        .first_token()
+        .is_some_and(|token| token.text() == "''");
+    let mut parts = Vec::new();
+    for part in string.parts() {
+        parts.push(match part {
+            InterpolPart::Literal(text) => StringPart::Literal(text.syntax().text().to_owned()),
+            InterpolPart::Interpolation(value) => StringPart::Interpolation(lower(
+                value
+                    .expr()
+                    .ok_or_else(|| error("missing interpolation expression"))?,
+                depth + 1,
+            )?),
+        });
+    }
+    crate::string::lower(parts, indented).map_err(error)
 }
 
 // Keep collection machinery out of the recursive lower frame.

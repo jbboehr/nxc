@@ -13,7 +13,7 @@ pub struct Token {
 /// Lex every byte, including trivia and invalid tokens. Spans are UTF-8 byte offsets.
 pub fn lex(source: &str) -> Vec<Token> {
     enum Mode {
-        String,
+        String { indented: bool },
         Interpolation { braces: usize },
     }
 
@@ -21,20 +21,28 @@ pub fn lex(source: &str) -> Vec<Token> {
     let mut modes = Vec::new();
     let mut tokens = Vec::new();
     loop {
-        if matches!(modes.last(), Some(Mode::String)) {
+        if let Some(&Mode::String { indented }) = modes.last() {
             let text = lexer.remainder();
             let start = source.len() - text.len();
             if text.is_empty() {
                 break;
             }
-            let (kind, len) = if text.starts_with('"') {
+            let closing = if indented {
+                text.starts_with("''")
+                    && !text.starts_with("'''")
+                    && !text.starts_with("''$")
+                    && !text.starts_with("''\\")
+            } else {
+                text.starts_with('"')
+            };
+            let (kind, len) = if closing {
                 modes.pop();
-                (K::StringEnd, 1)
+                (K::StringEnd, if indented { 2 } else { 1 })
             } else if text.starts_with("${") {
                 modes.push(Mode::Interpolation { braces: 0 });
                 (K::InterpolationStart, 2)
             } else {
-                (K::StringContent, string_content_len(text))
+                (K::StringContent, string_content_len(text, indented))
             };
             lexer.bump(len);
             tokens.push(Token {
@@ -47,7 +55,9 @@ pub fn lex(source: &str) -> Vec<Token> {
         let Some(kind) = lexer.next() else { break };
         let mut kind = kind.unwrap_or(K::ErrorToken);
         match kind {
-            K::StringStart => modes.push(Mode::String),
+            K::StringStart => modes.push(Mode::String {
+                indented: lexer.slice() == "''",
+            }),
             K::LBrace => {
                 if let Some(Mode::Interpolation { braces }) = modes.last_mut() {
                     *braces += 1;
@@ -73,13 +83,26 @@ pub fn lex(source: &str) -> Vec<Token> {
     tokens
 }
 
-fn string_content_len(text: &str) -> usize {
+fn string_content_len(text: &str, indented: bool) -> usize {
     let mut chars = text.char_indices().peekable();
     while let Some((index, character)) = chars.next() {
         match character {
-            '"' => return index,
-            '\\' => {
+            '"' if !indented => return index,
+            '\\' if !indented => {
                 chars.next();
+            }
+            '\'' if indented && matches!(chars.peek(), Some((_, '\''))) => {
+                chars.next();
+                match chars.peek() {
+                    Some((_, '\'' | '$')) => {
+                        chars.next();
+                    }
+                    Some((_, '\\')) => {
+                        chars.next();
+                        chars.next();
+                    }
+                    _ => return index,
+                }
             }
             // Nix consumes paired dollars as literal text, even before '{'.
             '$' => match chars.peek() {

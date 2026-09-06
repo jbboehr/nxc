@@ -20,8 +20,8 @@ support is provided by `.envrc` (`direnv allow`).
 The current subset implements identifiers, integers, parentheses, arithmetic,
 calls, and simple/attribute-pattern lambdas in both conversion directions.
 It also includes static attrsets, dotted bindings, inheritance, and selections
-with defaults, lists, double-quoted strings, and interpolation. `nxc` provides
-`check`, `to-nix`, and `from-nix`.
+with defaults, lists, double-quoted/indented strings, and interpolation. `nxc`
+provides `check`, `to-nix`, and `from-nix`.
 `xtask` provides the corpus runner described in
 [the handoff](docs/HANDOFF.md). All crates currently disable publishing.
 
@@ -112,7 +112,7 @@ Discovery errors abort before processing because the file list is incomplete.
 
 Native parse counts include the library's compatibility and resource preflight
 checks. Lowering is counted separately, so valid unsupported forms such as
-indented strings and `let` expressions are distinguishable from parse failures.
+paths and `let` expressions are distinguishable from parse failures.
 Coverage is expected to be low until those syntax forms are implemented. Small temporary
 corpora in the xtask tests exercise reporting and failure handling; no nixpkgs
 checkout is required by the test suite or vendored into this repository.
@@ -184,12 +184,22 @@ caller-built IR against the same invariant. Interpolations are never folded into
 literal text or rewritten as ordinary addition, preserving Nix coercion and
 string context.
 
-`string.rs` implements the shared double-quoted escape rules, including Nix's
-normalization of raw CR/CRLF and preservation of escaped CR. The native adapter
-uses rnix's raw string parts so newline normalization stays explicit. Emitters
-escape every literal dollar to preserve boundaries next to interpolation.
+`string.rs` normalizes raw fragments from both frontends. Double-quoted strings
+normalize raw CR/CRLF; indented strings preserve them. Indented normalization
+computes indentation before decoding escapes, then strips spaces across literal
+and interpolation boundaries. Escapes end indentation measurement even when
+they decode to whitespace. Final-line trimming respects escape fragment boundaries.
+The normalizer follows Nix's [lexer](https://github.com/NixOS/nix/blob/2.34.8/src/libexpr/lexer.l)
+and [indentation rules](https://github.com/NixOS/nix/blob/2.34.8/src/libexpr/include/nix/expr/parser-state.hh),
+with native-oracle coverage for blank lines, tabs, newlines, escapes, and context.
+It uses rnix's raw parts because rnix's normalization does not reproduce every
+native whitespace/escape case.
+
+Both quote styles use the same CST string nodes and canonical IR. The lexer
+tracks the quote style in its iterative mode stack. Canonical output uses double
+quotes and escapes every literal dollar to preserve interpolation boundaries.
 String and interpolation delimiters count toward nesting limits in both paths.
-Indented strings and quoted/dynamic attribute paths remain a later slice.
+Quoted/dynamic attribute paths remain a later slice.
 
 `nix::parse` returns an owned `nix::Parsed` wrapper with a separate `lower()`
 operation, allowing the corpus runner to count parsing and lowering without
