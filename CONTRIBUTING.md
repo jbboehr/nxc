@@ -20,7 +20,8 @@ support is provided by `.envrc` (`direnv allow`).
 The current subset implements identifiers, integers, parentheses, arithmetic,
 calls, and simple/attribute-pattern lambdas in both conversion directions.
 It also includes static attrsets, dotted bindings, inheritance, and selections
-with defaults. `nxc` provides `check`, `to-nix`, and `from-nix`.
+with defaults, plus double-quoted strings and interpolation. `nxc` provides
+`check`, `to-nix`, and `from-nix`.
 `xtask` provides the corpus runner described in
 [the handoff](docs/HANDOFF.md). All crates currently disable publishing.
 
@@ -45,8 +46,9 @@ Tests cover source reconstruction, malformed input, argument recovery, semantic
 round trips, CLI output and error handling, and resource limits. Proptest checks
 arbitrary UTF-8 input and generated semantic expressions. The native Nix oracle
 checks generated syntax, precedence, currying, parameter scope, lazy defaults,
-argument validation, recursive set merges, inheritance, and evaluation failures;
-it skips only when `nix-instantiate` is unavailable. Nix is provided in the dev
+argument validation, recursive set merges, inheritance, string coercion/context,
+and evaluation failures; it skips only when `nix-instantiate` is unavailable.
+Nix is provided in the dev
 shell and package checks. The oracle uses Nix's dummy store so it can run inside
 the package build sandbox without a daemon or writable Nix state directory.
 
@@ -109,8 +111,8 @@ Discovery errors abort before processing because the file list is incomplete.
 
 Native parse counts include the library's compatibility and resource preflight
 checks. Lowering is counted separately, so valid unsupported forms such as
-strings and `let` expressions are distinguishable from parse failures. Coverage is
-expected to be low until those syntax forms are implemented. Small temporary
+indented strings and `let` expressions are distinguishable from parse failures.
+Coverage is expected to be low until those syntax forms are implemented. Small temporary
 corpora in the xtask tests exercise reporting and failure handling; no nixpkgs
 checkout is required by the test suite or vendored into this repository.
 
@@ -123,7 +125,11 @@ The workspace and Nix package use that project's license expression:
 
 ## Frontend boundaries
 
-`syntax/lexer.rs` uses Logos and retains trivia and UTF-8 byte spans.
+`syntax/lexer.rs` uses Logos and retains trivia and UTF-8 byte spans. An iterative
+mode stack switches between string text and interpolation expressions, tracking
+braces within interpolations. Escaped quotes and comment markers inside string text
+remain literal; nested strings and comments inside interpolations use their
+own lexical rules.
 `syntax/parser.rs` uses Chumsky Pratt parsing to construct a temporary expression
 tree. `syntax/cst.rs` fills its spans with the original tokens to build an owned
 Rowan CST; `syntax/ast.rs` provides the typed expression view used for lowering.
@@ -160,6 +166,20 @@ Selections retain their full static path and optional lazy default. The parser
 uses Nix's simple-expression precedence for `or`; emitters parenthesize fallback
 expressions to preserve the IR. Attribute paths are bounded, and dotted bindings
 contribute their implicit attrset depth to the semantic nesting limit.
+
+String IR retains decoded literal text and unevaluated interpolation expressions.
+Canonical parts contain no empty or adjacent literals; an empty vector represents
+an empty string. Both adapters normalize literal parts, and emitters validate
+caller-built IR against the same invariant. Interpolations are never folded into
+literal text or rewritten as ordinary addition, preserving Nix coercion and
+string context.
+
+`string.rs` implements the shared double-quoted escape rules, including Nix's
+normalization of raw CR/CRLF and preservation of escaped CR. The native adapter
+uses rnix's raw string parts so newline normalization stays explicit. Emitters
+escape every literal dollar to preserve boundaries next to interpolation.
+String and interpolation delimiters count toward nesting limits in both paths.
+Indented strings and quoted/dynamic attribute paths remain a later slice.
 
 `nix::parse` returns an owned `nix::Parsed` wrapper with a separate `lower()`
 operation, allowing the corpus runner to count parsing and lowering without

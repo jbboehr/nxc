@@ -3,7 +3,7 @@
 use super::{NxcLanguage, SyntaxKind as K, SyntaxNode};
 use crate::{
     Diagnostic,
-    ir::{self, BinaryOp, Binding, Expr, Formal, Pattern},
+    ir::{self, BinaryOp, Binding, Expr, Formal, Pattern, StringPart},
 };
 use rowan::ast::AstNode;
 
@@ -50,6 +50,25 @@ impl Expression {
                 let name = self.0.text().to_string();
                 ir::validate_name(&name).map_err(error)?;
                 Ok(Expr::Variable(name))
+            }
+            K::StringExpr => {
+                let mut parts = Vec::new();
+                for part in self.0.children() {
+                    match part.kind() {
+                        K::StringText => ir::push_string_literal(
+                            &mut parts,
+                            crate::string::decode(&part.text().to_string()).map_err(error)?,
+                        ),
+                        K::StringInterpolation => parts.push(StringPart::Interpolation(
+                            part.children()
+                                .find_map(Self::cast)
+                                .ok_or_else(|| error("missing interpolation expression"))?
+                                .lower()?,
+                        )),
+                        _ => return Err(error("cannot lower an erroneous string part")),
+                    }
+                }
+                Ok(Expr::String(parts))
             }
             K::AttrSetExpr => Ok(Expr::AttrSet {
                 recursive: self

@@ -6,6 +6,8 @@ pub enum Expr {
     /// A nonnegative integer literal, at most `i64::MAX`. Negation is separate.
     Integer(u64),
     Variable(String),
+    /// Decoded parts, with no empty or adjacent literals. An empty vector is "".
+    String(Vec<StringPart>),
     AttrSet {
         recursive: bool,
         bindings: Vec<Binding>,
@@ -29,6 +31,24 @@ pub enum Expr {
         left: Box<Expr>,
         right: Box<Expr>,
     },
+}
+
+/// Interpolations retain their expression and Nix's string coercion/context.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum StringPart {
+    Literal(String),
+    Interpolation(Expr),
+}
+
+pub(crate) fn push_string_literal(parts: &mut Vec<StringPart>, text: String) {
+    if text.is_empty() {
+        return;
+    }
+    if let Some(StringPart::Literal(previous)) = parts.last_mut() {
+        previous.push_str(&text);
+    } else {
+        parts.push(StringPart::Literal(text));
+    }
 }
 
 /// Keep source order and grouping: literal-set merges can depend on which
@@ -117,6 +137,7 @@ impl Expr {
     pub(crate) fn validate(&self) -> Result<(), crate::Diagnostic> {
         let mut pending = vec![(self, 1)];
         let mut count = 0;
+        let mut literal_bytes = 0;
         let mut sets = Vec::new();
         while let Some((expr, depth)) = pending.pop() {
             count += 1;
@@ -130,6 +151,38 @@ impl Expr {
                 }
                 Self::Integer(_) => {}
                 Self::Variable(name) => validate_name(name).map_err(error)?,
+                Self::String(parts) => {
+                    if parts.len() > crate::MAX_TOKENS - count {
+                        return Err(error("string parts exceed the node limit"));
+                    }
+                    count += parts.len();
+                    let mut previous_literal = false;
+                    for part in parts {
+                        match part {
+                            StringPart::Literal(text) => {
+                                if text.is_empty() || previous_literal {
+                                    return Err(error(
+                                        "string literals must be nonempty and nonadjacent",
+                                    ));
+                                }
+                                if text.contains('\0') {
+                                    return Err(error("Nix strings cannot contain null bytes"));
+                                }
+                                if text.len() > crate::MAX_SOURCE_BYTES - literal_bytes {
+                                    return Err(error(
+                                        "string literals exceed the source size limit",
+                                    ));
+                                }
+                                literal_bytes += text.len();
+                                previous_literal = true;
+                            }
+                            StringPart::Interpolation(value) => {
+                                pending.push((value, depth + 1));
+                                previous_literal = false;
+                            }
+                        }
+                    }
+                }
                 Self::AttrSet { bindings, .. } => {
                     if bindings.len() > crate::MAX_TOKENS - count {
                         return Err(error("bindings exceed the node limit"));

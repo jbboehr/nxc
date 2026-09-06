@@ -1,18 +1,35 @@
 use nxc::{
     MAX_DEPTH, MAX_SOURCE_BYTES, MAX_TOKENS, emit,
-    ir::{BinaryOp, Binding, Expr, Formal, Pattern},
+    ir::{BinaryOp, Binding, Expr, Formal, Pattern, StringPart},
     nix, parse_nxc, syntax,
 };
 use proptest::prelude::*;
 
 fn expressions() -> impl Strategy<Value = Expr> {
     prop_oneof![
+        prop::collection::vec(
+            any::<char>().prop_filter("Nix strings exclude NUL", |c| *c != '\0'),
+            0..24
+        )
+        .prop_map(|chars| {
+            let text: String = chars.into_iter().collect();
+            Expr::String(if text.is_empty() {
+                vec![]
+            } else {
+                vec![StringPart::Literal(text)]
+            })
+        }),
         (0u64..100_000).prop_map(Expr::Integer),
         prop::sample::select(vec!["f", "x", "g", "foo-bar'", "true", "false", "null"])
             .prop_map(|name| Expr::Variable(name.into())),
     ]
     .prop_recursive(5, 64, 2, |inner| {
         prop_oneof![
+            inner.clone().prop_map(|value| Expr::String(vec![
+                StringPart::Literal("prefix$".into()),
+                StringPart::Interpolation(value),
+                StringPart::Literal("${suffix}\\\"".into()),
+            ])),
             (inner.clone(), any::<bool>()).prop_map(|(value, recursive)| Expr::AttrSet {
                 recursive,
                 bindings: vec![Binding::Assign {

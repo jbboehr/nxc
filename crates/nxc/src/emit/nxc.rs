@@ -26,8 +26,10 @@ pub fn emit(expr: &Expr) -> Result<String, Diagnostic> {
         .enumerate()
     {
         match token.kind {
-            K::LParen | K::LBrace => depth += 1,
-            K::RParen | K::RBrace => depth = depth.saturating_sub(1),
+            K::LParen | K::LBrace | K::StringStart | K::InterpolationStart => depth += 1,
+            K::RParen | K::RBrace | K::StringEnd | K::InterpolationEnd => {
+                depth = depth.saturating_sub(1)
+            }
             _ => {}
         }
         if index >= MAX_TOKENS || depth > MAX_DEPTH {
@@ -41,6 +43,7 @@ fn render(expr: &Expr) -> String {
     match expr {
         Expr::Integer(value) => value.to_string(),
         Expr::Variable(name) => name.clone(),
+        Expr::String(parts) => super::string(parts, render),
         Expr::AttrSet {
             recursive,
             bindings,

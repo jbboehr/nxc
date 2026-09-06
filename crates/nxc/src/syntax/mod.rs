@@ -62,11 +62,17 @@ pub fn parse(source: &str) -> Parse {
     for token in tokens.iter().filter(|t| !t.kind.is_trivia()) {
         count += 1;
         match token.kind {
-            SyntaxKind::LParen | SyntaxKind::LBrace => {
+            SyntaxKind::LParen
+            | SyntaxKind::LBrace
+            | SyntaxKind::StringStart
+            | SyntaxKind::InterpolationStart => {
                 depth += 1;
                 peak_depth = peak_depth.max(depth);
             }
-            SyntaxKind::RParen | SyntaxKind::RBrace => depth = depth.saturating_sub(1),
+            SyntaxKind::RParen
+            | SyntaxKind::RBrace
+            | SyntaxKind::StringEnd
+            | SyntaxKind::InterpolationEnd => depth = depth.saturating_sub(1),
             _ => {}
         }
     }

@@ -61,6 +61,12 @@ pub enum SyntaxKind {
     Inherit,
     #[token("or")]
     Or,
+    #[token("\"")]
+    StringStart,
+    StringContent,
+    StringEnd,
+    InterpolationStart,
+    InterpolationEnd,
     ErrorToken,
     Root,
     IntegerExpr,
@@ -72,6 +78,9 @@ pub enum SyntaxKind {
     LambdaExpr,
     AttrSetExpr,
     SelectExpr,
+    StringExpr,
+    StringText,
+    StringInterpolation,
     AttrPath,
     AttrName,
     AssignBinding,
@@ -116,6 +125,7 @@ impl SyntaxKind {
                 | Self::LambdaExpr
                 | Self::AttrSetExpr
                 | Self::SelectExpr
+                | Self::StringExpr
                 | Self::ErrorExpr
         )
     }
@@ -146,6 +156,11 @@ impl std::fmt::Display for SyntaxKind {
             Self::Rec => "'rec'",
             Self::Inherit => "'inherit'",
             Self::Or => "'or'",
+            Self::StringStart => "opening quote",
+            Self::StringContent => "string text",
+            Self::StringEnd => "closing quote",
+            Self::InterpolationStart => "'${'",
+            Self::InterpolationEnd => "interpolation end",
             _ => "unsupported token",
         };
         f.write_str(name)
@@ -187,6 +202,11 @@ impl rowan::Language for NxcLanguage {
             Rec,
             Inherit,
             Or,
+            StringStart,
+            StringContent,
+            StringEnd,
+            InterpolationStart,
+            InterpolationEnd,
             ErrorToken,
             Root,
             IntegerExpr,
@@ -198,6 +218,9 @@ impl rowan::Language for NxcLanguage {
             LambdaExpr,
             AttrSetExpr,
             SelectExpr,
+            StringExpr,
+            StringText,
+            StringInterpolation,
             AttrPath,
             AttrName,
             AssignBinding,

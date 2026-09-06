@@ -258,3 +258,105 @@ fn attrsets_preserve_merging_recursion_inheritance_and_lazy_selection() {
         }
     }
 }
+
+#[test]
+fn strings_preserve_values_coercion_and_lazy_interpolation() {
+    if !nix_available() {
+        return;
+    }
+    for (source, expected) in [
+        (r#""""#, Some(r#""""#)),
+        (r#""hello 🦀""#, Some(r#""hello 🦀""#)),
+        (r#""\n\r\t\"\\""#, Some(r#""\n\r\t\"\\""#)),
+        (r#""\q\0\x41\u0041""#, Some(r#""q0x41u0041""#)),
+        ("\"a\rb\"", Some(r#""a\nb""#)),
+        ("\"a\r\nb\"", Some(r#""a\nb""#)),
+        ("\"a\\\rb\"", Some(r#""a\rb""#)),
+        ("\"a\\\r\nb\"", Some(r#""a\r\nb""#)),
+        (r#""\${x}""#, Some(r#""${x}""#)),
+        (r#""$${x}""#, Some(r#""$${x}""#)),
+        (r#""$$${x}""#, Some(r#""$$X""#)),
+        (r#""\$${x}""#, Some(r#""$X""#)),
+        (r#""${"inner ${x}"}""#, Some(r#""inner X""#)),
+        (r#"(x: "${x}") "value""#, Some(r#""value""#)),
+        (r#""${{ __toString = self: "ok"; }}""#, Some(r#""ok""#)),
+        (r#"{ unused = "${1 / 0}"; a = "ok"; }.a"#, Some(r#""ok""#)),
+        (r#"{ a = "ok"; }.a or "${1 / 0}""#, Some(r#""ok""#)),
+        (r#""${1}""#, None),
+        (r#""${null}""#, None),
+        (r#""${{}}""#, None),
+        (r#""${x: x}""#, None),
+        (r#""${1 / 0}""#, None),
+    ] {
+        let original = nix::import(source).unwrap();
+        let converted = nxc::emit::nxc(&original).unwrap();
+        let generated = nix::emit(&parse_nxc(&converted).unwrap()).unwrap();
+        for value in [source, generated.as_str()] {
+            let expression = format!("let x = \"X\"; in {value}");
+            let result = Command::new("nix-instantiate")
+                .args([
+                    "--store",
+                    "dummy://",
+                    "--eval",
+                    "--strict",
+                    "--json",
+                    "--expr",
+                    &expression,
+                ])
+                .output()
+                .unwrap();
+            if let Some(expected) = expected {
+                assert!(
+                    result.status.success(),
+                    "{expression}: {}",
+                    String::from_utf8_lossy(&result.stderr)
+                );
+                assert_eq!(
+                    String::from_utf8(result.stdout).unwrap().trim(),
+                    expected,
+                    "{expression}"
+                );
+            } else {
+                assert!(!result.status.success(), "{expression} must fail");
+            }
+        }
+    }
+}
+
+#[test]
+fn interpolation_retains_nix_string_context() {
+    if !nix_available() {
+        return;
+    }
+    let source = r#""a${x}b""#;
+    let converted = nxc::emit::nxc(&nix::import(source).unwrap()).unwrap();
+    let generated = nix::emit(&parse_nxc(&converted).unwrap()).unwrap();
+    for value in [source, generated.as_str()] {
+        let expression = format!(
+            r#"
+            let x = builtins.appendContext "payload" {{
+                "/nix/store/00000000000000000000000000000000-fixture" = {{ path = true; }};
+            }}; value = {value};
+            in builtins.getContext value == builtins.getContext x && value == "apayloadb"
+        "#
+        );
+        let result = Command::new("nix-instantiate")
+            .args([
+                "--store",
+                "dummy://",
+                "--eval",
+                "--strict",
+                "--json",
+                "--expr",
+                &expression,
+            ])
+            .output()
+            .unwrap();
+        assert!(
+            result.status.success(),
+            "{}",
+            String::from_utf8_lossy(&result.stderr)
+        );
+        assert_eq!(String::from_utf8(result.stdout).unwrap().trim(), "true");
+    }
+}

@@ -54,6 +54,17 @@ pub(super) fn parse(tokens: &[Token], source_len: usize) -> (Option<Node>, Vec<D
             .clone()
             .delimited_by(just(K::LParen), just(K::RParen))
             .map_with(|inner, e| Node::new(K::ParenExpr, e.span(), vec![inner]));
+        let string_text =
+            just(K::StringContent).map_with(|_, e| Node::new(K::StringText, e.span(), vec![]));
+        let interpolation = expr
+            .clone()
+            .delimited_by(just(K::InterpolationStart), just(K::InterpolationEnd))
+            .map_with(|value, e| Node::new(K::StringInterpolation, e.span(), vec![value]));
+        let string = choice((string_text, interpolation))
+            .repeated()
+            .collect::<Vec<_>>()
+            .delimited_by(just(K::StringStart), just(K::StringEnd))
+            .map_with(|parts, e| Node::new(K::StringExpr, e.span(), parts));
 
         let name = just(K::Ident).map_with(|_, e| Node::new(K::IdentPattern, e.span(), vec![]));
         let formal = just(K::Ident)
@@ -140,18 +151,64 @@ pub(super) fn parse(tokens: &[Token], source_len: usize) -> (Option<Node>, Vec<D
                 Node::new(K::InheritBinding, e.span(), children)
             });
         let nested = choice((
-            nested_delimiters(K::LParen, K::RParen, [(K::LBrace, K::RBrace)], |_| ()),
-            nested_delimiters(K::LBrace, K::RBrace, [(K::LParen, K::RParen)], |_| ()),
+            nested_delimiters(
+                K::LParen,
+                K::RParen,
+                [
+                    (K::LBrace, K::RBrace),
+                    (K::StringStart, K::StringEnd),
+                    (K::InterpolationStart, K::InterpolationEnd),
+                ],
+                |_| (),
+            ),
+            nested_delimiters(
+                K::LBrace,
+                K::RBrace,
+                [
+                    (K::LParen, K::RParen),
+                    (K::StringStart, K::StringEnd),
+                    (K::InterpolationStart, K::InterpolationEnd),
+                ],
+                |_| (),
+            ),
+            nested_delimiters(
+                K::StringStart,
+                K::StringEnd,
+                [
+                    (K::LParen, K::RParen),
+                    (K::LBrace, K::RBrace),
+                    (K::InterpolationStart, K::InterpolationEnd),
+                ],
+                |_| (),
+            ),
+            nested_delimiters(
+                K::InterpolationStart,
+                K::InterpolationEnd,
+                [
+                    (K::LParen, K::RParen),
+                    (K::LBrace, K::RBrace),
+                    (K::StringStart, K::StringEnd),
+                ],
+                |_| (),
+            ),
         ));
         let binding = choice((assignment, inherit))
             .then_ignore(just(K::Semicolon))
             .recover_with(via_parser(
                 nested
                     .clone()
-                    .or(
-                        none_of([K::LParen, K::LBrace, K::Semicolon, K::RBrace, K::RParen])
-                            .ignored(),
-                    )
+                    .or(none_of([
+                        K::LParen,
+                        K::LBrace,
+                        K::StringStart,
+                        K::InterpolationStart,
+                        K::Semicolon,
+                        K::RBrace,
+                        K::RParen,
+                        K::StringEnd,
+                        K::InterpolationEnd,
+                    ])
+                    .ignored())
                     .repeated()
                     .at_least(1)
                     .ignored()
@@ -171,7 +228,18 @@ pub(super) fn parse(tokens: &[Token], source_len: usize) -> (Option<Node>, Vec<D
         // Skip nested groups as a unit, stopping at the outer separator.
         let argument = expr.clone().recover_with(via_parser(
             nested
-                .or(none_of([K::LParen, K::LBrace, K::Comma, K::RParen, K::RBrace]).ignored())
+                .or(none_of([
+                    K::LParen,
+                    K::LBrace,
+                    K::StringStart,
+                    K::InterpolationStart,
+                    K::Comma,
+                    K::RParen,
+                    K::RBrace,
+                    K::StringEnd,
+                    K::InterpolationEnd,
+                ])
+                .ignored())
                 .repeated()
                 .at_least(1)
                 .ignored()
@@ -184,7 +252,7 @@ pub(super) fn parse(tokens: &[Token], source_len: usize) -> (Option<Node>, Vec<D
             .collect::<Vec<_>>()
             .delimited_by(just(K::LParen), just(K::RParen));
 
-        let atom = choice((integer, variable, paren, attrset)).boxed();
+        let atom = choice((integer, variable, paren, attrset, string)).boxed();
         // Native `or` takes a simple expression: a call/arithmetic/lambda in
         // the fallback needs parentheses. Nested selections extend right.
         let simple = recursive(|simple| {

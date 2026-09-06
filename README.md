@@ -10,7 +10,7 @@ A C/Rust-flavored concrete syntax for Nix with unchanged Nix evaluation semantic
 The current subset supports identifiers, integer literals, parentheses,
 arithmetic (`+`, `-`, `*`, `/`, and unary `-`), curried function calls, and lambdas
 with simple or attribute-pattern parameters. Static attrsets and attribute
-selections are also supported.
+selections, double-quoted strings, and string interpolation are also supported.
 
 For example, `f(1 + 2, x)` converts to native Nix equivalent to `f (1 + 2) x`.
 Conversion preserves the expression's structure and leaves evaluation to Nix.
@@ -75,13 +75,30 @@ the fallback; failures while evaluating an existing value are preserved.
 Native `#` line comments must use LF or CRLF endings. Bare-CR line comments are
 currently rejected by `from-nix`.
 
+Strings use Nix's double quotes and `${...}` interpolation. Expressions inside
+interpolations use nxc syntax, including explicit function calls:
+
+```nix
+"hello ${name}"
+"value=${builtins.toString(42)}"
+"${{ value = "nested"; }.value}"
+"literal: \${name}"
+```
+
+Escapes follow Nix: `\n`, `\r`, and `\t` produce control characters; `\"` and
+`\\` produce a quote and backslash. Other escapes discard the backslash, so
+`\q` produces `q`. Paired dollar signs remain literal: `"$${name}"` does not
+interpolate. Raw CR and CRLF inside strings become LF; escaped CR is preserved.
+Strings cannot contain null bytes. Interpolation retains Nix's coercion rules,
+string context, and lazy evaluation; conversion does not evaluate expressions.
+
 Inputs are currently limited to 1 MiB, 1,024 non-trivia tokens, and 128 levels of
-parenthesis, brace, or semantic-expression nesting. Integer literals range from
-`0` to `9223372036854775807`; negative values use unary `-`.
+parenthesis, brace, string, interpolation, or semantic-expression nesting.
+Integer literals range from `0` to `9223372036854775807`; negative values use unary `-`.
 Attribute paths have at most 128 components, and dotted bindings count toward
 semantic nesting. Generated output must fit these limits as well.
 
-The broader syntax below is planned; lists, `let`, strings, quoted/dynamic
+The broader syntax below is planned; lists, `let`, indented strings, quoted/dynamic
 attributes, attribute-existence tests (`?`), and paths are not implemented yet.
 
 ```nix

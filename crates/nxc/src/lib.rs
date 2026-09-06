@@ -5,6 +5,7 @@
 pub mod emit;
 pub mod ir;
 pub mod nix;
+mod string;
 pub mod syntax;
 
 /// Conservative resource bounds for this first expression subset.

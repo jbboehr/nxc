@@ -14,6 +14,7 @@ fn render(expr: &Expr) -> String {
     match expr {
         Expr::Integer(value) => value.to_string(),
         Expr::Variable(name) => name.clone(),
+        Expr::String(parts) => crate::emit::string(parts, render),
         Expr::AttrSet {
             recursive,
             bindings,

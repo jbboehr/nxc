@@ -3,6 +3,39 @@
 mod nxc;
 pub use nxc::emit as nxc;
 
+pub(crate) fn string(
+    parts: &[crate::ir::StringPart],
+    render: fn(&crate::ir::Expr) -> String,
+) -> String {
+    use crate::ir::StringPart;
+    let mut source = String::from("\"");
+    for part in parts {
+        match part {
+            StringPart::Literal(text) => {
+                for character in text.chars() {
+                    match character {
+                        '"' => source.push_str("\\\""),
+                        '\\' => source.push_str("\\\\"),
+                        // Escape every dollar, including one next to an interpolation.
+                        '$' => source.push_str("\\$"),
+                        '\n' => source.push_str("\\n"),
+                        '\r' => source.push_str("\\r"),
+                        '\t' => source.push_str("\\t"),
+                        other => source.push(other),
+                    }
+                }
+            }
+            StringPart::Interpolation(value) => {
+                source.push_str("${");
+                source.push_str(&render(value));
+                source.push('}');
+            }
+        }
+    }
+    source.push('"');
+    source
+}
+
 pub(crate) fn attrset(
     recursive: bool,
     bindings: &[crate::ir::Binding],

@@ -2,11 +2,11 @@
 
 use crate::{
     Diagnostic, MAX_DEPTH, MAX_SOURCE_BYTES, MAX_TOKENS,
-    ir::{self, BinaryOp, Binding, Expr, Formal, Pattern},
+    ir::{self, BinaryOp, Binding, Expr, Formal, Pattern, StringPart},
 };
 use rnix::{
     SyntaxKind as K,
-    ast::{self, HasEntry},
+    ast::{self, AstToken, HasEntry, InterpolPart},
 };
 
 /// Parse native Nix through rnix and adapt only supported forms to the semantic IR.
@@ -110,10 +110,16 @@ pub(super) fn check_source(source: &str) -> Result<(), Diagnostic> {
         }
         count += 1;
         match kind {
-            K::TOKEN_L_PAREN | K::TOKEN_L_BRACE | K::TOKEN_L_BRACK => depth += 1,
-            K::TOKEN_R_PAREN | K::TOKEN_R_BRACE | K::TOKEN_R_BRACK => {
-                depth = depth.saturating_sub(1)
-            }
+            K::TOKEN_L_PAREN
+            | K::TOKEN_L_BRACE
+            | K::TOKEN_L_BRACK
+            | K::TOKEN_STRING_START
+            | K::TOKEN_INTERPOL_START => depth += 1,
+            K::TOKEN_R_PAREN
+            | K::TOKEN_R_BRACE
+            | K::TOKEN_R_BRACK
+            | K::TOKEN_STRING_END
+            | K::TOKEN_INTERPOL_END => depth = depth.saturating_sub(1),
             _ => {}
         }
         if count > MAX_TOKENS || depth > MAX_DEPTH {
@@ -173,6 +179,27 @@ fn lower(node: ast::Expr, depth: usize) -> Result<Expr, Diagnostic> {
             function: Box::new(child(apply.lambda())?),
             argument: Box::new(child(apply.argument())?),
         }),
+        ast::Expr::Str(string) => {
+            if !syntax(&string)
+                .first_token()
+                .is_some_and(|token| token.text() == "\"")
+            {
+                return Err(error("only double-quoted strings are supported yet"));
+            }
+            let mut parts = Vec::new();
+            for part in string.parts() {
+                match part {
+                    InterpolPart::Literal(text) => ir::push_string_literal(
+                        &mut parts,
+                        crate::string::decode(text.syntax().text()).map_err(error)?,
+                    ),
+                    InterpolPart::Interpolation(value) => {
+                        parts.push(StringPart::Interpolation(child(value.expr())?));
+                    }
+                }
+            }
+            Ok(Expr::String(parts))
+        }
         ast::Expr::AttrSet(set) => Ok(Expr::AttrSet {
             recursive: set.rec_token().is_some(),
             bindings: set
