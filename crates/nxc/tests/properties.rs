@@ -1,0 +1,112 @@
+use nxc::{
+    MAX_DEPTH, MAX_SOURCE_BYTES, MAX_TOKENS, emit,
+    ir::{BinaryOp, Expr},
+    nix, parse_nxc, syntax,
+};
+use proptest::prelude::*;
+
+fn expressions() -> impl Strategy<Value = Expr> {
+    prop_oneof![
+        (0u64..100_000).prop_map(Expr::Integer),
+        prop::sample::select(vec!["f", "x", "g", "foo-bar'", "true", "false", "null"])
+            .prop_map(|name| Expr::Variable(name.into())),
+    ]
+    .prop_recursive(5, 64, 2, |inner| {
+        prop_oneof![
+            inner.clone().prop_map(|e| Expr::Negate(Box::new(e))),
+            (inner.clone(), inner.clone()).prop_map(|(f, a)| Expr::Apply {
+                function: Box::new(f),
+                argument: Box::new(a)
+            }),
+            (
+                prop::sample::select(vec![
+                    BinaryOp::Add,
+                    BinaryOp::Subtract,
+                    BinaryOp::Multiply,
+                    BinaryOp::Divide
+                ]),
+                inner.clone(),
+                inner
+            )
+                .prop_map(|(op, l, r)| Expr::Binary {
+                    op,
+                    left: Box::new(l),
+                    right: Box::new(r)
+                }),
+        ]
+    })
+}
+
+proptest! {
+    #![proptest_config(ProptestConfig::with_cases(128))]
+
+    #[test]
+    fn arbitrary_text_is_lossless_and_diagnostics_have_valid_spans(source in prop::collection::vec(any::<char>(), 0..256).prop_map(|c| c.into_iter().collect::<String>())) {
+        let parsed = syntax::parse(&source);
+        prop_assert_eq!(parsed.syntax().unwrap().to_string(), source.as_str());
+        let mut cursor = 0;
+        for token in syntax::lexer::lex(&source) {
+            prop_assert_eq!(token.span.start, cursor);
+            prop_assert!(token.span.end > cursor);
+            prop_assert!(source.is_char_boundary(token.span.end));
+            cursor = token.span.end;
+        }
+        prop_assert_eq!(cursor, source.len());
+        for errors in [parsed.lower().err(), nix::import(&source).err()].into_iter().flatten() {
+            prop_assert!(!errors.is_empty());
+            for error in errors {
+                prop_assert!(error.span.start <= error.span.end && error.span.end <= source.len());
+                prop_assert!(source.is_char_boundary(error.span.start));
+                prop_assert!(source.is_char_boundary(error.span.end));
+            }
+        }
+    }
+
+    #[test]
+    fn generated_semantic_expressions_survive_both_dialects(expr in expressions()) {
+        let native = nix::emit(&expr).unwrap();
+        let source = emit::nxc(&expr).unwrap();
+        let from_nxc = parse_nxc(&source).unwrap();
+        let from_native = nix::import(&native).unwrap();
+        prop_assert_eq!(from_nxc.canonical(), expr.canonical());
+        prop_assert_eq!(from_native.canonical(), expr.canonical());
+        prop_assert_eq!(emit::nxc(&from_nxc).unwrap(), source);
+        prop_assert_eq!(nix::emit(&from_native).unwrap(), native);
+    }
+}
+
+#[test]
+fn resource_limits_return_errors_and_preserve_cst_when_possible() {
+    for source in [
+        format!(
+            "{}1{}",
+            "(".repeat(MAX_DEPTH + 1),
+            ")".repeat(MAX_DEPTH + 1)
+        ),
+        format!("{}1", "- ".repeat(MAX_TOKENS + 1)),
+        format!("{}1", "- ".repeat(MAX_DEPTH + 1)),
+    ] {
+        let parsed = syntax::parse(&source);
+        assert_eq!(parsed.syntax().unwrap().to_string(), source);
+        assert!(parsed.lower().is_err());
+        assert!(nix::import(&source).is_err());
+    }
+    let too_large = " ".repeat(MAX_SOURCE_BYTES + 1);
+    let parsed = syntax::parse(&too_large);
+    assert!(parsed.syntax().is_none());
+    assert!(parsed.lower().is_err());
+    assert!(nix::import(&too_large).is_err());
+}
+
+#[test]
+fn emitters_reject_invalid_ir_instead_of_emitting_different_semantics() {
+    for expr in [
+        Expr::Integer(u64::MAX),
+        Expr::Variable("x: x".into()),
+        Expr::Variable("fn".into()),
+        Expr::Variable("__curPos".into()),
+    ] {
+        assert!(emit::nxc(&expr).is_err());
+        assert!(nix::emit(&expr).is_err());
+    }
+}

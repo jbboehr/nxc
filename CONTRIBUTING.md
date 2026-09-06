@@ -17,8 +17,9 @@ support is provided by `.envrc` (`direnv allow`).
 - `crates/nxc-cli`: the `nxc` executable.
 - `xtask`: development tasks, with a `cargo xtask` alias.
 
-This slice establishes build tooling only. The executables support `--help` and
-`--version`; parsing, conversion, and corpus tasks will follow
+The first expression slice implements identifiers, integers, parentheses,
+arithmetic, and calls in both conversion directions. `nxc` provides `check`,
+`to-nix`, and `from-nix`. `xtask` remains a placeholder for the corpus runner in
 [the handoff](docs/HANDOFF.md). All crates currently disable publishing.
 
 ```sh
@@ -38,8 +39,13 @@ cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
 nixfmt --check flake.nix
 ```
 
-There are no language tests yet. These commands verify that the workspace and
-its dependencies compile and that formatting and lint checks pass.
+Tests cover source reconstruction, malformed input, argument recovery, semantic
+round trips, CLI output and error handling, and resource limits. Proptest checks
+arbitrary UTF-8 input and generated semantic expressions. The native Nix oracle
+checks generated syntax, precedence, currying, laziness, and evaluation failures;
+it skips only when `nix-instantiate` is unavailable. Nix is provided in the dev
+shell and package checks. The oracle uses Nix's dummy store so it can run inside
+the package build sandbox without a daemon or writable Nix state directory.
 
 From any shell with Nix:
 
@@ -72,3 +78,35 @@ work. Re-run `cargo generate-lockfile` after dependency changes and
 [`jbboehr/phpstan-array-merge` at `75e0a612`](https://github.com/jbboehr/phpstan-array-merge/tree/75e0a612bd317460e8d79f11a611260d6a5546dd).
 The workspace and Nix package use that project's license expression:
 `AGPL-3.0-only WITH romic-exception`.
+
+## Frontend boundaries
+
+`syntax/lexer.rs` uses Logos and retains trivia and UTF-8 byte spans.
+`syntax/parser.rs` uses Chumsky Pratt parsing to construct a temporary expression
+tree. `syntax/cst.rs` fills its spans with the original tokens to build an owned
+Rowan CST; `syntax/ast.rs` provides the typed expression view used for lowering.
+Recovery stops at call-argument separators, and any diagnostic blocks lowering.
+Even invalid or unsupported input keeps a lossless CST, except when it exceeds
+the source-size limit.
+
+The native path uses rnix exclusively inside `nix/import.rs`. Its Rowan types
+stay inside the adapter. Preflight checks reject bare-CR line comments and
+whitespace that rnix accepts but native Nix does not. Both paths lower to
+`ir::Expr`, where application is
+unary and parentheses and source metadata do not participate in equality.
+`canonical()` is an identity view for this subset: no constant folding or other
+evaluation takes place. In particular, `true`, `false`, and `null` remain variable
+references, preserving Nix shadowing behavior.
+
+Diagnostics carry byte spans separately from the IR. The nxc CST retains the
+source locations; CLI diagnostics attach the originating file path. Emitters
+validate IR supplied by callers and add parentheses conservatively. Paths are
+neither resolved nor rewritten. Reserved keywords, `__curPos`, and `__nxc_*`
+intrinsics are rejected until their semantics are implemented.
+
+The limits in `lib.rs` are intentionally conservative for this slice. Both
+parsers reject excessive source size, token count, or nesting, and emitters
+reject output that would exceed the corresponding parser's size/token limits.
+Token and nesting limits are checked before collecting lexical diagnostics;
+over-budget nxc input produces one limit diagnostic and a flat lossless CST.
+Raise these bounds only with coverage for parser, CST, IR, and emitter depth.

@@ -16,6 +16,8 @@ logos = "0.16"
 nxc = { path = "crates/nxc" }
 rnix = "0.14"
 rowan = "0.17"
+proptest = "1"
+tempfile = "3"
 
 [workspace.lints.rust]
 unsafe_code = "forbid"

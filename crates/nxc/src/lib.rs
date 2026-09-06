@@ -2,4 +2,34 @@
 
 //! A C/Rust-flavored concrete syntax for Nix with unchanged evaluation semantics.
 //!
-//! The frontend, semantic IR, and bidirectional converters will live in this crate.
+pub mod emit;
+pub mod ir;
+pub mod nix;
+pub mod syntax;
+
+/// Conservative resource bounds for this first expression subset.
+pub const MAX_SOURCE_BYTES: usize = 1024 * 1024;
+pub const MAX_TOKENS: usize = 1024;
+pub const MAX_DEPTH: usize = 128;
+
+use std::ops::Range;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Diagnostic {
+    pub span: Range<usize>,
+    pub message: String,
+}
+
+impl Diagnostic {
+    pub(crate) fn new(span: Range<usize>, message: impl Into<String>) -> Self {
+        Self {
+            span,
+            message: message.into(),
+        }
+    }
+}
+
+/// Lower nxc source into a syntax-independent semantic expression.
+pub fn parse_nxc(source: &str) -> Result<ir::Expr, Vec<Diagnostic>> {
+    syntax::parse(source).lower()
+}
