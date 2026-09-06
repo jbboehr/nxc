@@ -35,6 +35,20 @@ pub enum SyntaxKind {
     Star,
     #[token("/")]
     Slash,
+    #[token("fn")]
+    Fn,
+    #[token("=>")]
+    Arrow,
+    #[token("{")]
+    LBrace,
+    #[token("}")]
+    RBrace,
+    #[token("?")]
+    Question,
+    #[token("...")]
+    Ellipsis,
+    #[token("@")]
+    At,
     ErrorToken,
     Root,
     IntegerExpr,
@@ -43,6 +57,12 @@ pub enum SyntaxKind {
     CallExpr,
     NegateExpr,
     BinaryExpr,
+    LambdaExpr,
+    IdentPattern,
+    AttrPattern,
+    Formal,
+    PatternBind,
+    PatternEllipsis,
     ErrorExpr,
 }
 
@@ -73,6 +93,7 @@ impl SyntaxKind {
                 | Self::CallExpr
                 | Self::NegateExpr
                 | Self::BinaryExpr
+                | Self::LambdaExpr
                 | Self::ErrorExpr
         )
     }
@@ -90,6 +111,13 @@ impl std::fmt::Display for SyntaxKind {
             Self::Minus => "'-'",
             Self::Star => "'*'",
             Self::Slash => "'/'",
+            Self::Fn => "'fn'",
+            Self::Arrow => "'=>'",
+            Self::LBrace => "'{'",
+            Self::RBrace => "'}'",
+            Self::Question => "'?'",
+            Self::Ellipsis => "'...'",
+            Self::At => "'@'",
             _ => "unsupported token",
         };
         f.write_str(name)
@@ -118,6 +146,13 @@ impl rowan::Language for NxcLanguage {
             Minus,
             Star,
             Slash,
+            Fn,
+            Arrow,
+            LBrace,
+            RBrace,
+            Question,
+            Ellipsis,
+            At,
             ErrorToken,
             Root,
             IntegerExpr,
@@ -126,6 +161,12 @@ impl rowan::Language for NxcLanguage {
             CallExpr,
             NegateExpr,
             BinaryExpr,
+            LambdaExpr,
+            IdentPattern,
+            AttrPattern,
+            Formal,
+            PatternBind,
+            PatternEllipsis,
             ErrorExpr,
         ];
         KINDS.get(usize::from(raw.0)).copied().unwrap_or(ErrorToken)

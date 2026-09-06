@@ -6,6 +6,10 @@ pub enum Expr {
     /// A nonnegative integer literal, at most `i64::MAX`. Negation is separate.
     Integer(u64),
     Variable(String),
+    Lambda {
+        parameter: Pattern,
+        body: Box<Expr>,
+    },
     Apply {
         function: Box<Expr>,
         argument: Box<Expr>,
@@ -16,6 +20,24 @@ pub enum Expr {
         left: Box<Expr>,
         right: Box<Expr>,
     },
+}
+
+/// A single Nix argument, optionally destructured into named attributes.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Pattern {
+    Ident(String),
+    AttrSet {
+        fields: Vec<Formal>,
+        ellipsis: bool,
+        bind: Option<String>,
+    },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Formal {
+    pub name: String,
+    /// Evaluated lazily in the parameter scope when the attribute is absent.
+    pub default: Option<Expr>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -90,6 +112,32 @@ impl Expr {
                 }
                 Self::Integer(_) => {}
                 Self::Variable(name) => validate_name(name).map_err(error)?,
+                Self::Lambda { parameter, body } => {
+                    match parameter {
+                        Pattern::Ident(name) => validate_name(name).map_err(error)?,
+                        Pattern::AttrSet { fields, bind, .. } => {
+                            if fields.len() > crate::MAX_TOKENS - count {
+                                return Err(error("pattern exceeds the node limit"));
+                            }
+                            count += fields.len();
+                            let mut names = std::collections::BTreeSet::new();
+                            if let Some(name) = bind {
+                                validate_name(name).map_err(error)?;
+                                names.insert(name.as_str());
+                            }
+                            for field in fields {
+                                validate_name(&field.name).map_err(error)?;
+                                if !names.insert(field.name.as_str()) {
+                                    return Err(error("duplicate lambda parameter"));
+                                }
+                                if let Some(default) = &field.default {
+                                    pending.push((default, depth + 1));
+                                }
+                            }
+                        }
+                    }
+                    pending.push((body, depth + 1));
+                }
                 Self::Negate(expr) => pending.push((expr, depth + 1)),
                 Self::Apply { function, argument } => pending.extend([
                     (function.as_ref(), depth + 1),

@@ -1,6 +1,6 @@
 use nxc::{
     MAX_DEPTH, MAX_SOURCE_BYTES, MAX_TOKENS, emit,
-    ir::{BinaryOp, Expr},
+    ir::{BinaryOp, Expr, Formal, Pattern},
     nix, parse_nxc, syntax,
 };
 use proptest::prelude::*;
@@ -13,6 +13,29 @@ fn expressions() -> impl Strategy<Value = Expr> {
     ]
     .prop_recursive(5, 64, 2, |inner| {
         prop_oneof![
+            inner.clone().prop_map(|body| Expr::Lambda {
+                parameter: Pattern::Ident("x".into()),
+                body: Box::new(body),
+            }),
+            (inner.clone(), inner.clone(), any::<bool>(), any::<bool>()).prop_map(
+                |(default, body, ellipsis, capture)| Expr::Lambda {
+                    parameter: Pattern::AttrSet {
+                        fields: vec![
+                            Formal {
+                                name: "x".into(),
+                                default: Some(default)
+                            },
+                            Formal {
+                                name: "y".into(),
+                                default: None
+                            },
+                        ],
+                        ellipsis,
+                        bind: capture.then(|| "args".into()),
+                    },
+                    body: Box::new(body),
+                }
+            ),
             inner.clone().prop_map(|e| Expr::Negate(Box::new(e))),
             (inner.clone(), inner.clone()).prop_map(|(f, a)| Expr::Apply {
                 function: Box::new(f),

@@ -7,8 +7,9 @@ Lex Ferrata\
 
 A C/Rust-flavored concrete syntax for Nix with unchanged Nix evaluation semantics.
 
-The first expression subset supports identifiers, integer literals, parentheses,
-arithmetic (`+`, `-`, `*`, `/`, and unary `-`), and curried function calls.
+The current subset supports identifiers, integer literals, parentheses,
+arithmetic (`+`, `-`, `*`, `/`, and unary `-`), curried function calls, and lambdas
+with simple or attribute-pattern parameters.
 
 For example, `f(1 + 2, x)` converts to native Nix equivalent to `f (1 + 2) x`.
 Conversion preserves the expression's structure and leaves evaluation to Nix.
@@ -30,16 +31,34 @@ Identifiers retain Nix's hyphens and apostrophes: `a-b` is one identifier, while
 not supported yet. Comments may use `//`, `#`, or `/* ... */`, and calls may have
 a trailing comma. Calls require at least one argument.
 
+Lambdas use `=>`. The forms `x => x + 1`, `(x) => x + 1`, and
+`fn(x) => x + 1` all convert to native `x: x + 1`. Multiple arguments use nested
+lambdas: `(x => y => x + y)(1, 2)` evaluates to `3` in Nix. Parenthesize a
+lambda when calling it or using it as an arithmetic operand.
+
+Attribute patterns keep Nix's lazy defaults (`?`), extra-attribute marker
+(`...`), and whole-argument capture (`@`):
+
+```nix
+fn({ x, y ? x + 1, ... }) => y
+(args@{ x ? 1 }) => args
+```
+
+The pattern must be parenthesized; `fn` is optional. Capture may also follow
+the pattern, as in `({ x ? 1 }@args) => args`. Captures preserve the supplied
+argument, without adding values supplied by defaults. Pattern fields are
+comma-separated; a trailing comma is allowed after a field, but not after `...`.
+
 Native `#` line comments must use LF or CRLF endings. Bare-CR line comments are
 currently rejected by `from-nix`.
 
 Inputs are currently limited to 1 MiB, 1,024 non-trivia tokens, and 128 levels of
-parenthesis or semantic-expression nesting. Integer literals range from `0` to
-`9223372036854775807`; negative values use unary `-`.
+parenthesis, brace, or semantic-expression nesting. Integer literals range from
+`0` to `9223372036854775807`; negative values use unary `-`.
 Generated output must fit these limits as well.
 
-The broader syntax below is planned; attrsets, lists, lambdas, `let`, strings,
-and paths are not implemented yet.
+The broader syntax below is planned; attrset expressions, lists, selections,
+`let`, strings, and paths are not implemented yet.
 
 ```nix
 # Nix

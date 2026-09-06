@@ -3,7 +3,7 @@
 use super::{NxcLanguage, SyntaxKind as K, SyntaxNode};
 use crate::{
     Diagnostic,
-    ir::{BinaryOp, Expr},
+    ir::{BinaryOp, Expr, Formal, Pattern},
 };
 use rowan::ast::AstNode;
 
@@ -49,6 +49,17 @@ impl Expression {
             K::VariableExpr => Ok(Expr::Variable(self.0.text().to_string())),
             K::ParenExpr => child(),
             K::NegateExpr => Ok(Expr::Negate(Box::new(child()?))),
+            K::LambdaExpr => {
+                let parameter = self
+                    .0
+                    .children()
+                    .find(|n| matches!(n.kind(), K::IdentPattern | K::AttrPattern))
+                    .ok_or_else(|| error("missing lambda parameter"))?;
+                Ok(Expr::Lambda {
+                    parameter: lower_pattern(&parameter)?,
+                    body: Box::new(child()?),
+                })
+            }
             K::CallExpr => {
                 let mut function = child()?;
                 for argument in children {
@@ -81,4 +92,46 @@ impl Expression {
             _ => Err(error("cannot lower an erroneous expression")),
         }
     }
+}
+
+fn lower_pattern(node: &SyntaxNode) -> Result<Pattern, Diagnostic> {
+    let name = |node: &SyntaxNode| {
+        node.children_with_tokens()
+            .filter_map(|it| it.into_token())
+            .find(|token| token.kind() == K::Ident)
+            .map(|token| token.text().to_owned())
+            .ok_or_else(|| {
+                let span = node.text_range();
+                Diagnostic::new(
+                    usize::from(span.start())..usize::from(span.end()),
+                    "missing parameter name",
+                )
+            })
+    };
+    if node.kind() == K::IdentPattern {
+        return Ok(Pattern::Ident(name(node)?));
+    }
+    let mut fields = Vec::new();
+    let mut bind = None;
+    let mut ellipsis = false;
+    for child in node.children() {
+        match child.kind() {
+            K::Formal => fields.push(Formal {
+                name: name(&child)?,
+                default: child
+                    .children()
+                    .find_map(Expression::cast)
+                    .map(|expr| expr.lower())
+                    .transpose()?,
+            }),
+            K::PatternBind => bind = Some(name(&child)?),
+            K::PatternEllipsis => ellipsis = true,
+            _ => {}
+        }
+    }
+    Ok(Pattern::AttrSet {
+        fields,
+        ellipsis,
+        bind,
+    })
 }

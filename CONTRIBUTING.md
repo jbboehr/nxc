@@ -17,9 +17,9 @@ support is provided by `.envrc` (`direnv allow`).
 - `crates/nxc-cli`: the `nxc` executable.
 - `xtask`: development tasks, with a `cargo xtask` alias.
 
-The first expression slice implements identifiers, integers, parentheses,
-arithmetic, and calls in both conversion directions. `nxc` provides `check`,
-`to-nix`, and `from-nix`. `xtask` provides the corpus runner described in
+The current subset implements identifiers, integers, parentheses, arithmetic,
+calls, and simple/attribute-pattern lambdas in both conversion directions.
+`nxc` provides `check`, `to-nix`, and `from-nix`. `xtask` provides the corpus runner described in
 [the handoff](docs/HANDOFF.md). All crates currently disable publishing.
 
 ```sh
@@ -42,7 +42,8 @@ nixfmt --check flake.nix
 Tests cover source reconstruction, malformed input, argument recovery, semantic
 round trips, CLI output and error handling, and resource limits. Proptest checks
 arbitrary UTF-8 input and generated semantic expressions. The native Nix oracle
-checks generated syntax, precedence, currying, laziness, and evaluation failures;
+checks generated syntax, precedence, currying, parameter scope, lazy defaults,
+argument validation, and evaluation failures;
 it skips only when `nix-instantiate` is unavailable. Nix is provided in the dev
 shell and package checks. The oracle uses Nix's dummy store so it can run inside
 the package build sandbox without a daemon or writable Nix state directory.
@@ -106,7 +107,7 @@ Discovery errors abort before processing because the file list is incomplete.
 
 Native parse counts include the library's compatibility and resource preflight
 checks. Lowering is counted separately, so valid unsupported forms such as
-attrsets and lambdas are distinguishable from parse failures. Coverage is
+attrsets and selections are distinguishable from parse failures. Coverage is
 expected to be low until those syntax forms are implemented. Small temporary
 corpora in the xtask tests exercise reporting and failure handling; no nixpkgs
 checkout is required by the test suite or vendored into this repository.
@@ -136,6 +137,13 @@ unary and parentheses and source metadata do not participate in equality.
 `canonical()` is an identity view for this subset: no constant folding or other
 evaluation takes place. In particular, `true`, `false`, and `null` remain variable
 references, preserving Nix shadowing behavior.
+
+Lambda IR retains the single parameter, required fields, unevaluated defaults,
+ellipsis, and optional whole-argument binding. Parameter spellings (`fn`,
+parentheses, and either position of `@`) lower to the same representation.
+Duplicate parameter names, including collisions with the whole-argument
+binding, are rejected. Default expressions remain in the parameter scope;
+conversion does not insert defaults into the captured argument or evaluate them.
 
 `nix::parse` returns an owned `nix::Parsed` wrapper with a separate `lower()`
 operation, allowing the corpus runner to count parsing and lowering without

@@ -2,7 +2,7 @@
 
 use crate::{
     Diagnostic, MAX_DEPTH, MAX_SOURCE_BYTES, MAX_TOKENS,
-    ir::{self, BinaryOp, Expr},
+    ir::{self, BinaryOp, Expr, Formal, Pattern},
 };
 use rnix::{SyntaxKind as K, ast};
 
@@ -170,6 +170,42 @@ fn lower(node: ast::Expr, depth: usize) -> Result<Expr, Diagnostic> {
             function: Box::new(child(apply.lambda())?),
             argument: Box::new(child(apply.argument())?),
         }),
+        ast::Expr::Lambda(lambda) => {
+            let name = |ident: Option<ast::Ident>| {
+                ident
+                    .map(|ident| syntax(&ident).text().to_string())
+                    .ok_or_else(|| error("missing lambda parameter name"))
+            };
+            let parameter = match lambda
+                .param()
+                .ok_or_else(|| error("missing lambda parameter"))?
+            {
+                ast::Param::IdentParam(param) => Pattern::Ident(name(param.ident())?),
+                ast::Param::Pattern(pattern) => Pattern::AttrSet {
+                    fields: pattern
+                        .pat_entries()
+                        .map(|field| {
+                            Ok(Formal {
+                                name: name(field.ident())?,
+                                default: field
+                                    .default()
+                                    .map(|expr| lower(expr, depth + 1))
+                                    .transpose()?,
+                            })
+                        })
+                        .collect::<Result<_, Diagnostic>>()?,
+                    ellipsis: pattern.ellipsis_token().is_some(),
+                    bind: pattern
+                        .pat_bind()
+                        .map(|bind| name(bind.ident()))
+                        .transpose()?,
+                },
+            };
+            Ok(Expr::Lambda {
+                parameter,
+                body: Box::new(child(lambda.body())?),
+            })
+        }
         ast::Expr::UnaryOp(unary) if unary.operator() == Some(ast::UnaryOpKind::Negate) => {
             Ok(Expr::Negate(Box::new(child(unary.expr())?)))
         }

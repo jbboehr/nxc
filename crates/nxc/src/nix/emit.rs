@@ -14,6 +14,13 @@ fn render(expr: &Expr) -> String {
     match expr {
         Expr::Integer(value) => value.to_string(),
         Expr::Variable(name) => name.clone(),
+        Expr::Lambda { parameter, body } => {
+            format!(
+                "({}: {})",
+                crate::emit::pattern(parameter, render),
+                render(body)
+            )
+        }
         Expr::Negate(value) => format!("(-{})", render(value)),
         Expr::Binary { op, left, right } => {
             format!("({} {} {})", render(left), op.spelling(), render(right))

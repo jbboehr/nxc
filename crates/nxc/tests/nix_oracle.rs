@@ -109,3 +109,62 @@ fn adapter_rejects_whitespace_that_the_native_parser_rejects() {
         assert!(nix::import(&source).is_err(), "adapter accepted {source:?}");
     }
 }
+
+#[test]
+fn lambdas_preserve_scope_currying_lazy_defaults_and_argument_checks() {
+    if !nix_available() {
+        return;
+    }
+    for (source, argument, expected) in [
+        ("x: y: x * 10 + y", "2 3", Some("23")),
+        ("x: (x: x + 1) 4 + x", "10", Some("15")),
+        ("x: 7", "(1 / 0)", Some("7")),
+        ("true: true", "5", Some("5")),
+        ("{ x, y ? x + 1 }: y", "{ x = 4; }", Some("5")),
+        ("{ x ? y + 1, y ? 4 }: x", "{}", Some("5")),
+        ("{ x ? 1 / 0 }: x", "{ x = 8; }", Some("8")),
+        ("{ x ? 1 / 0 }: 7", "{}", Some("7")),
+        ("{ x ? 1, ... }: x", "{ extra = 2; }", Some("1")),
+        ("args@{ x ? 7 }: args", "{}", Some("{}")),
+        ("args@{ x ? args, ... }: x", "{ y = 3; }", Some("{\"y\":3}")),
+        ("{ f ? x: x + 1 }: f 2", "{}", Some("3")),
+        ("{ x }: x", "{}", None),
+        ("{ x }: 7", "{}", None),
+        ("{ x }: x", "{ x = 1; extra = 2; }", None),
+        ("{ x ? 1 / 0 }: x", "{}", None),
+        ("{ ... }: 1", "2", None),
+    ] {
+        let original = nix::import(source).unwrap();
+        let converted = nxc::emit::nxc(&original).unwrap();
+        let generated = nix::emit(&parse_nxc(&converted).unwrap()).unwrap();
+        for lambda in [source, generated.as_str()] {
+            let expression = format!("({lambda}) {argument}");
+            let result = Command::new("nix-instantiate")
+                .args([
+                    "--store",
+                    "dummy://",
+                    "--eval",
+                    "--strict",
+                    "--json",
+                    "--expr",
+                    &expression,
+                ])
+                .output()
+                .unwrap();
+            if let Some(expected) = expected {
+                assert!(
+                    result.status.success(),
+                    "{expression}: {}",
+                    String::from_utf8_lossy(&result.stderr)
+                );
+                assert_eq!(
+                    String::from_utf8(result.stdout).unwrap().trim(),
+                    expected,
+                    "{expression}"
+                );
+            } else {
+                assert!(!result.status.success(), "{expression} must fail");
+            }
+        }
+    }
+}
