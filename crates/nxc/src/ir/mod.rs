@@ -14,6 +14,11 @@ pub enum Expr {
         recursive: bool,
         bindings: Vec<Binding>,
     },
+    /// Lazy, mutually recursive bindings in scope for the body.
+    Let {
+        bindings: Vec<Binding>,
+        body: Box<Expr>,
+    },
     Select {
         value: Box<Expr>,
         path: Vec<String>,
@@ -191,7 +196,11 @@ impl Expr {
                         }
                     }
                 }
-                Self::AttrSet { bindings, .. } => {
+                Self::AttrSet { bindings, .. } | Self::Let { bindings, .. } => {
+                    let local = matches!(expr, Self::Let { .. });
+                    if let Self::Let { body, .. } = expr {
+                        pending.push((body, depth + 1));
+                    }
                     if bindings.len() > crate::MAX_TOKENS - count {
                         return Err(error("bindings exceed the node limit"));
                     }
@@ -201,6 +210,9 @@ impl Expr {
                         match binding {
                             Binding::Assign { path, value } => {
                                 validate_path(path, &mut count).map_err(error)?;
+                                if local {
+                                    validate_name(&path[0]).map_err(error)?;
+                                }
                                 // Dotted bindings introduce implicit nested attrsets.
                                 pending.push((value, depth + path.len()));
                             }
@@ -210,7 +222,7 @@ impl Expr {
                                 }
                                 count += names.len();
                                 for name in names {
-                                    if source.is_some() {
+                                    if source.is_some() && !local {
                                         validate_attr_name(name)
                                     } else {
                                         validate_name(name)

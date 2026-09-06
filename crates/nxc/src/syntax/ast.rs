@@ -63,39 +63,11 @@ impl Expression {
                     .children_with_tokens()
                     .filter_map(|it| it.into_token())
                     .any(|token| token.kind() == K::Rec),
-                bindings: self
-                    .0
-                    .children()
-                    .map(|binding| match binding.kind() {
-                        K::AssignBinding => Ok(Binding::Assign {
-                            path: lower_path(&binding)?,
-                            value: binding
-                                .children()
-                                .find_map(Self::cast)
-                                .ok_or_else(|| error("missing binding value"))?
-                                .lower()?,
-                        }),
-                        K::InheritBinding => Ok(Binding::Inherit {
-                            source: binding
-                                .children()
-                                .find(|n| n.kind() == K::InheritSource)
-                                .map(|source| {
-                                    source
-                                        .children()
-                                        .find_map(Self::cast)
-                                        .ok_or_else(|| error("missing inheritance source"))?
-                                        .lower()
-                                })
-                                .transpose()?,
-                            names: binding
-                                .children()
-                                .filter(|n| n.kind() == K::AttrName)
-                                .map(|name| name.text().to_string())
-                                .collect(),
-                        }),
-                        _ => Err(error("cannot lower an erroneous binding")),
-                    })
-                    .collect::<Result<_, _>>()?,
+                bindings: lower_bindings(&self.0)?,
+            }),
+            K::LetExpr => Ok(Expr::Let {
+                bindings: lower_bindings(&self.0)?,
+                body: Box::new(child()?),
             }),
             K::SelectExpr => Ok(Expr::Select {
                 value: Box::new(child()?),
@@ -150,6 +122,48 @@ impl Expression {
             _ => Err(error("cannot lower an erroneous expression")),
         }
     }
+}
+
+fn lower_bindings(node: &SyntaxNode) -> Result<Vec<Binding>, Diagnostic> {
+    let range = node.text_range();
+    let error = |message| {
+        Diagnostic::new(
+            usize::from(range.start())..usize::from(range.end()),
+            message,
+        )
+    };
+    node.children()
+        .filter(|node| !node.kind().is_expr())
+        .map(|binding| match binding.kind() {
+            K::AssignBinding => Ok(Binding::Assign {
+                path: lower_path(&binding)?,
+                value: binding
+                    .children()
+                    .find_map(Expression::cast)
+                    .ok_or_else(|| error("missing binding value"))?
+                    .lower()?,
+            }),
+            K::InheritBinding => Ok(Binding::Inherit {
+                source: binding
+                    .children()
+                    .find(|n| n.kind() == K::InheritSource)
+                    .map(|source| {
+                        source
+                            .children()
+                            .find_map(Expression::cast)
+                            .ok_or_else(|| error("missing inheritance source"))?
+                            .lower()
+                    })
+                    .transpose()?,
+                names: binding
+                    .children()
+                    .filter(|n| n.kind() == K::AttrName)
+                    .map(|name| name.text().to_string())
+                    .collect(),
+            }),
+            _ => Err(error("cannot lower an erroneous binding")),
+        })
+        .collect()
 }
 
 fn lower_string(node: &SyntaxNode) -> Result<Expr, Diagnostic> {

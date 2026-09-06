@@ -54,6 +54,11 @@ fn render(expr: &Expr) -> String {
             recursive,
             bindings,
         } => super::attrset(*recursive, bindings, render),
+        Expr::Let { bindings, body } => format!(
+            "let {{{} yield {}; }}",
+            super::bindings(bindings, render),
+            render(body)
+        ),
         Expr::Select {
             value,
             path,

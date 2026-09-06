@@ -183,28 +183,11 @@ fn lower(node: ast::Expr, depth: usize) -> Result<Expr, Diagnostic> {
         ast::Expr::Str(string) => lower_string(string, depth),
         ast::Expr::AttrSet(set) => Ok(Expr::AttrSet {
             recursive: set.rec_token().is_some(),
-            bindings: set
-                .entries()
-                .map(|entry| match entry {
-                    ast::Entry::AttrpathValue(binding) => {
-                        let path = lower_path(binding.attrpath())?;
-                        let value = lower(
-                            binding
-                                .value()
-                                .ok_or_else(|| error("missing binding value"))?,
-                            depth + path.len(),
-                        )?;
-                        Ok(Binding::Assign { path, value })
-                    }
-                    ast::Entry::Inherit(inherit) => Ok(Binding::Inherit {
-                        source: inherit
-                            .from()
-                            .map(|source| child(source.expr()))
-                            .transpose()?,
-                        names: inherit.attrs().map(lower_attr).collect::<Result<_, _>>()?,
-                    }),
-                })
-                .collect::<Result<_, Diagnostic>>()?,
+            bindings: lower_bindings(&set, depth)?,
+        }),
+        ast::Expr::LetIn(local) => Ok(Expr::Let {
+            bindings: lower_bindings(&local, depth)?,
+            body: Box::new(child(local.body())?),
         }),
         ast::Expr::Select(select) => Ok(Expr::Select {
             value: Box::new(child(select.expr())?),
@@ -283,6 +266,44 @@ fn lower(node: ast::Expr, depth: usize) -> Result<Expr, Diagnostic> {
             syntax(&other).kind()
         ))),
     }
+}
+
+fn lower_bindings(node: &impl HasEntry, depth: usize) -> Result<Vec<Binding>, Diagnostic> {
+    let range = syntax(node).text_range();
+    let error = |message| {
+        Diagnostic::new(
+            usize::from(range.start())..usize::from(range.end()),
+            message,
+        )
+    };
+    node.entries()
+        .map(|entry| match entry {
+            ast::Entry::AttrpathValue(binding) => {
+                let path = lower_path(binding.attrpath())?;
+                let value = lower(
+                    binding
+                        .value()
+                        .ok_or_else(|| error("missing binding value"))?,
+                    depth + path.len(),
+                )?;
+                Ok(Binding::Assign { path, value })
+            }
+            ast::Entry::Inherit(inherit) => Ok(Binding::Inherit {
+                source: inherit
+                    .from()
+                    .map(|source| {
+                        lower(
+                            source
+                                .expr()
+                                .ok_or_else(|| error("missing inheritance source"))?,
+                            depth + 1,
+                        )
+                    })
+                    .transpose()?,
+                names: inherit.attrs().map(lower_attr).collect::<Result<_, _>>()?,
+            }),
+        })
+        .collect()
 }
 
 fn lower_string(string: ast::Str, depth: usize) -> Result<Expr, Diagnostic> {

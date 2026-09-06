@@ -127,7 +127,7 @@ pub(super) fn parse(tokens: &[Token], source_len: usize) -> (Option<Node>, Vec<D
                 Node::new(K::LambdaExpr, e.span(), vec![parameter, body])
             });
 
-        let attr_name = one_of([K::Ident, K::Or, K::Fn])
+        let attr_name = one_of([K::Ident, K::Or, K::Fn, K::Yield])
             .map_with(|_, e| Node::new(K::AttrName, e.span(), vec![]));
         let path = attr_name
             .separated_by(just(K::Dot))
@@ -207,40 +207,66 @@ pub(super) fn parse(tokens: &[Token], source_len: usize) -> (Option<Node>, Vec<D
                 |_| (),
             ),
         ));
-        let binding = choice((assignment, inherit))
-            .then_ignore(just(K::Semicolon))
-            .recover_with(via_parser(
-                nested
-                    .clone()
-                    .or(none_of([
-                        K::LParen,
-                        K::LBracket,
-                        K::RBracket,
-                        K::LBrace,
-                        K::StringStart,
-                        K::InterpolationStart,
-                        K::Semicolon,
-                        K::RBrace,
-                        K::RParen,
-                        K::StringEnd,
-                        K::InterpolationEnd,
-                    ])
-                    .ignored())
-                    .repeated()
-                    .at_least(1)
-                    .ignored()
-                    .then_ignore(just(K::Semicolon).or_not())
-                    .map_with(|_, e| Node::new(K::ErrorBinding, e.span(), vec![])),
-            ));
+        let binding = |in_let: bool| {
+            choice((assignment.clone(), inherit.clone()))
+                .then_ignore(just(K::Semicolon))
+                .recover_with(via_parser(
+                    nested
+                        .clone()
+                        // A qualified attribute name is not the let result marker.
+                        .or(just(K::Dot).then(just(K::Yield)).ignored())
+                        .or(none_of([
+                            K::LParen,
+                            K::LBracket,
+                            K::RBracket,
+                            K::LBrace,
+                            K::StringStart,
+                            K::InterpolationStart,
+                            K::Semicolon,
+                            K::RBrace,
+                            K::RParen,
+                            K::StringEnd,
+                            K::InterpolationEnd,
+                        ])
+                        .filter(move |kind| !in_let || *kind != K::Yield)
+                        .ignored())
+                        .repeated()
+                        .at_least(1)
+                        .ignored()
+                        .then_ignore(just(K::Semicolon).or_not())
+                        .map_with(|_, e| Node::new(K::ErrorBinding, e.span(), vec![])),
+                ))
+        };
         let attrset = just(K::Rec)
             .or_not()
             .ignore_then(
-                binding
+                binding(false)
                     .repeated()
                     .collect::<Vec<_>>()
                     .delimited_by(just(K::LBrace), just(K::RBrace)),
             )
             .map_with(|bindings, e| Node::new(K::AttrSetExpr, e.span(), bindings));
+
+        let let_expr = just(K::Let)
+            .ignore_then(
+                // `yield` belongs to the result even when an earlier binding
+                // is malformed or missing its semicolon.
+                just(K::Yield)
+                    .not()
+                    .ignore_then(binding(true))
+                    .repeated()
+                    .collect::<Vec<_>>()
+                    .then(
+                        just(K::Yield)
+                            .ignore_then(expr.clone())
+                            .then_ignore(just(K::Semicolon)),
+                    )
+                    .delimited_by(just(K::LBrace), just(K::RBrace)),
+            )
+            .map_with(|(mut bindings, body), e| {
+                bindings.push(body);
+                Node::new(K::LetExpr, e.span(), bindings)
+            });
 
         // Skip nested groups as a unit, stopping at the outer separator.
         let item = expr.clone().recover_with(via_parser(
@@ -280,7 +306,7 @@ pub(super) fn parse(tokens: &[Token], source_len: usize) -> (Option<Node>, Vec<D
             .collect::<Vec<_>>()
             .delimited_by(just(K::LParen), just(K::RParen));
 
-        let atom = choice((integer, variable, paren, attrset, string, list)).boxed();
+        let atom = choice((integer, variable, paren, attrset, let_expr, string, list)).boxed();
         // Native `or` takes a simple expression: a call/arithmetic/lambda in
         // the fallback needs parentheses. Nested selections extend right.
         let simple = recursive(|simple| {

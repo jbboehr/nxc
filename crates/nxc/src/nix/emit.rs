@@ -24,6 +24,11 @@ fn render(expr: &Expr) -> String {
             recursive,
             bindings,
         } => crate::emit::attrset(*recursive, bindings, render),
+        Expr::Let { bindings, body } => format!(
+            "(let{} in {})",
+            crate::emit::bindings(bindings, render),
+            render(body)
+        ),
         Expr::Select {
             value,
             path,

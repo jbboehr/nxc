@@ -10,8 +10,8 @@ A C/Rust-flavored concrete syntax for Nix with unchanged Nix evaluation semantic
 The current subset supports identifiers, integer literals, parentheses,
 arithmetic (`+`, `-`, `*`, `/`, and unary `-`), curried function calls, and lambdas
 with simple or attribute-pattern parameters. Static attrsets and attribute
-selections, lists, double-quoted and indented strings, and string interpolation
-are also supported.
+selections, lists, `let` expressions, double-quoted and indented strings, and
+string interpolation are also supported.
 
 For example, `f(1 + 2, x)` converts to native Nix equivalent to `f (1 + 2) x`.
 Conversion preserves the expression's structure and leaves evaluation to Nix.
@@ -61,10 +61,32 @@ and both forms of `inherit`:
 (fn({ x }) => x + 1)({ x = 2; })
 ```
 
-Bindings and selections currently accept bare static attribute names, including
+Attrset bindings and selections accept bare static attribute names, including
 attribute names such as `fn`, `yield`, and `or`. Binding conflicts are rejected;
 literal nested attrsets merge according to Nix's rules. Values remain lazy, and
 `inherit x` retains its enclosing-scope lookup even inside a recursive attrset.
+
+Local bindings use `let { ... yield ...; }`:
+
+```nix
+let {
+    a = b + 1;
+    b = 2;
+    yield a;
+}
+```
+
+This converts to native `let a = b + 1; b = 2; in a` and evaluates to `3` in
+Nix. Bindings are lazy and mutually recursive, so their order does not limit
+which variables they can reference. Dotted bindings and both forms of `inherit`
+work here too. `yield` selects the result expression: it is required exactly
+once, must be the final item, and needs a semicolon. It does not return early.
+
+A `let` block is an expression and can appear directly in calls, lists,
+arithmetic, and selections, for example `f(let { yield 1; })` or
+`let { yield { a = 1; }; }.a`. The first component of a local binding must be a
+supported variable name; `fn`, `yield`, `or`, `__curPos`, and `__nxc_*` remain
+reserved there. Nested attribute names keep the attrset rules.
 
 Use `value.a.b` to select an attribute and `value.a or fallback` for a missing
 attribute. `or` keeps Nix's tight precedence: `s.f or fallback(x)` means
@@ -90,7 +112,7 @@ while `[a, -b]` contains two elements. Likewise, `[f (x)]` contains one call;
 use `[f, (x)]` for two elements. Generated nxc always includes commas between
 elements. Conversion preserves element order, nesting, and lazy evaluation.
 Native Nix input keeps its own list rules, including parentheses around calls,
-arithmetic, and lambdas used as individual elements.
+arithmetic, lambdas, and `let ... in ...` used as individual elements.
 
 Double-quoted strings use Nix's escapes and `${...}` interpolation. Expressions
 inside interpolations use nxc syntax, including explicit function calls:
@@ -133,8 +155,11 @@ Integer literals range from `0` to `9223372036854775807`; negative values use un
 Attribute paths have at most 128 components, and dotted bindings count toward
 semantic nesting. Generated output must fit these limits as well.
 
-The broader syntax below is planned; `let`, quoted/dynamic attributes,
-attribute-existence tests (`?`), and paths are not implemented yet.
+Quoted/dynamic attributes, attribute-existence tests (`?`), paths, `if`, `with`,
+and `assert` are not implemented yet. The older native `let { body = ...; }`
+syntax is also unsupported.
+
+A complete conversion example:
 
 ```nix
 # Nix

@@ -20,8 +20,8 @@ support is provided by `.envrc` (`direnv allow`).
 The current subset implements identifiers, integers, parentheses, arithmetic,
 calls, and simple/attribute-pattern lambdas in both conversion directions.
 It also includes static attrsets, dotted bindings, inheritance, and selections
-with defaults, lists, double-quoted/indented strings, and interpolation. `nxc`
-provides `check`, `to-nix`, and `from-nix`.
+with defaults, lists, `let` expressions, double-quoted/indented strings, and
+interpolation. `nxc` provides `check`, `to-nix`, and `from-nix`.
 `xtask` provides the corpus runner described in
 [the handoff](docs/HANDOFF.md). All crates currently disable publishing.
 
@@ -46,8 +46,8 @@ Tests cover source reconstruction, malformed input, argument recovery, semantic
 round trips, CLI output and error handling, and resource limits. Proptest checks
 arbitrary UTF-8 input and generated semantic expressions. The native Nix oracle
 checks generated syntax, precedence, currying, parameter scope, lazy defaults,
-argument validation, recursive set merges, inheritance, list boundaries/laziness,
-string coercion/context, and evaluation failures; it skips only when
+argument validation, recursive set merges, local binding scope, inheritance,
+list boundaries/laziness, string coercion/context, and evaluation failures; it skips only when
 `nix-instantiate` is unavailable.
 Nix is provided in the dev
 shell and package checks. The oracle uses Nix's dummy store so it can run inside
@@ -112,7 +112,7 @@ Discovery errors abort before processing because the file list is incomplete.
 
 Native parse counts include the library's compatibility and resource preflight
 checks. Lowering is counted separately, so valid unsupported forms such as
-paths and `let` expressions are distinguishable from parse failures.
+paths and `with` expressions are distinguishable from parse failures.
 Coverage is expected to be low until those syntax forms are implemented. Small temporary
 corpora in the xtask tests exercise reporting and failure handling; no nixpkgs
 checkout is required by the test suite or vendored into this repository.
@@ -135,7 +135,8 @@ own lexical rules.
 tree. `syntax/cst.rs` fills its spans with the original tokens to build an owned
 Rowan CST; `syntax/ast.rs` provides the typed expression view used for lowering.
 Recovery stops at call-argument/list commas or binding semicolons, skipping nested
-delimiter groups. Any diagnostic blocks lowering.
+delimiter groups. Inside a `let` block it also stops before `yield`, preserving
+the result after a malformed binding. Any diagnostic blocks lowering.
 Even invalid or unsupported input keeps a lossless CST, except when it exceeds
 the source-size limit.
 
@@ -163,6 +164,19 @@ bounds. Inheritance remains distinct from assignment to preserve its scope.
 Static attribute names have separate validation from variable names; bare names
 such as `fn` and `or` are permitted in attribute positions. Quoted and dynamic
 attributes remain unsupported.
+
+`Expr::Let` reuses ordered bindings and retains a separate body. Bindings are
+neither expanded into assignments nor rewritten as recursive attrset selections;
+plain inheritance keeps its outer-scope lookup. The first path component and
+inherited names bind variables, so they use variable-name validation even for
+`inherit (source)`. Remaining path components use attribute-name validation.
+Both binding values and the body pass the shared resource checks.
+
+The nxc parser treats the delimited `let { ... yield ...; }` form as an atom.
+Exactly one final `yield` is required. `yield` stays valid as an attribute name
+outside that result marker. Native lowering accepts `let ... in ...` and rejects
+the legacy `let { body = ...; }` form. Native emission parenthesizes let-expressions
+to preserve boundaries in lists, selection defaults, calls, and arithmetic.
 
 Selections retain their full static path and optional lazy default. The parser
 uses Nix's simple-expression precedence for `or`; emitters parenthesize fallback

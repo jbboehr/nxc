@@ -41,8 +41,19 @@ pub(crate) fn attrset(
     bindings: &[crate::ir::Binding],
     render: fn(&crate::ir::Expr) -> String,
 ) -> String {
+    format!(
+        "{}{{{} }}",
+        if recursive { "rec " } else { "" },
+        self::bindings(bindings, render)
+    )
+}
+
+pub(crate) fn bindings(
+    bindings: &[crate::ir::Binding],
+    render: fn(&crate::ir::Expr) -> String,
+) -> String {
     use crate::ir::Binding;
-    let mut source = if recursive { "rec {" } else { "{" }.to_owned();
+    let mut source = String::new();
     for binding in bindings {
         source.push(' ');
         match binding {
@@ -65,7 +76,6 @@ pub(crate) fn attrset(
             }
         }
     }
-    source.push_str(" }");
     source
 }
 

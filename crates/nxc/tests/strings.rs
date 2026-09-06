@@ -78,7 +78,7 @@ fn malformed_and_unsupported_strings_remain_lossless_errors() {
         "\"a\0b\"",
         r#"{ "quoted" = 1; }"#,
         r#"s."quoted""#,
-        r#""${let x = 1; in x}""#,
+        r#""${if true then 1 else 2}""#,
     ] {
         let parsed = syntax::parse(source);
         assert_eq!(parsed.syntax().unwrap().to_string(), source);
