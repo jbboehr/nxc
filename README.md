@@ -10,7 +10,7 @@ A C/Rust-flavored concrete syntax for Nix with unchanged Nix evaluation semantic
 The current subset supports identifiers, integer literals, parentheses,
 arithmetic (`+`, `-`, `*`, `/`, and unary `-`), curried function calls, and lambdas
 with simple or attribute-pattern parameters. Static attrsets and attribute
-selections, double-quoted strings, and string interpolation are also supported.
+selections, lists, double-quoted strings, and string interpolation are also supported.
 
 For example, `f(1 + 2, x)` converts to native Nix equivalent to `f (1 + 2) x`.
 Conversion preserves the expression's structure and leaves evaluation to Nix.
@@ -75,6 +75,22 @@ the fallback; failures while evaluating an existing value are preserved.
 Native `#` line comments must use LF or CRLF endings. Bare-CR line comments are
 currently rejected by `from-nix`.
 
+Lists support commas, including a trailing comma. Commas may be omitted when
+the next token cannot continue the current expression:
+
+```nix
+[a, b, f(x),]
+[a b f(x)]
+[[1, 2], [], [3]]
+```
+
+Each element consumes a full expression: `[a - b]` contains one subtraction,
+while `[a, -b]` contains two elements. Likewise, `[f (x)]` contains one call;
+use `[f, (x)]` for two elements. Generated nxc always includes commas between
+elements. Conversion preserves element order, nesting, and lazy evaluation.
+Native Nix input keeps its own list rules, including parentheses around calls,
+arithmetic, and lambdas used as individual elements.
+
 Strings use Nix's double quotes and `${...}` interpolation. Expressions inside
 interpolations use nxc syntax, including explicit function calls:
 
@@ -93,12 +109,12 @@ Strings cannot contain null bytes. Interpolation retains Nix's coercion rules,
 string context, and lazy evaluation; conversion does not evaluate expressions.
 
 Inputs are currently limited to 1 MiB, 1,024 non-trivia tokens, and 128 levels of
-parenthesis, brace, string, interpolation, or semantic-expression nesting.
+parenthesis, brace, bracket, string, interpolation, or semantic-expression nesting.
 Integer literals range from `0` to `9223372036854775807`; negative values use unary `-`.
 Attribute paths have at most 128 components, and dotted bindings count toward
 semantic nesting. Generated output must fit these limits as well.
 
-The broader syntax below is planned; lists, `let`, indented strings, quoted/dynamic
+The broader syntax below is planned; `let`, indented strings, quoted/dynamic
 attributes, attribute-existence tests (`?`), and paths are not implemented yet.
 
 ```nix

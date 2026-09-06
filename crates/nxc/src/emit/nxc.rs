@@ -26,8 +26,10 @@ pub fn emit(expr: &Expr) -> Result<String, Diagnostic> {
         .enumerate()
     {
         match token.kind {
-            K::LParen | K::LBrace | K::StringStart | K::InterpolationStart => depth += 1,
-            K::RParen | K::RBrace | K::StringEnd | K::InterpolationEnd => {
+            K::LParen | K::LBrace | K::LBracket | K::StringStart | K::InterpolationStart => {
+                depth += 1
+            }
+            K::RParen | K::RBrace | K::RBracket | K::StringEnd | K::InterpolationEnd => {
                 depth = depth.saturating_sub(1)
             }
             _ => {}
@@ -44,6 +46,10 @@ fn render(expr: &Expr) -> String {
         Expr::Integer(value) => value.to_string(),
         Expr::Variable(name) => name.clone(),
         Expr::String(parts) => super::string(parts, render),
+        Expr::List(items) => format!(
+            "[{}]",
+            items.iter().map(render).collect::<Vec<_>>().join(", ")
+        ),
         Expr::AttrSet {
             recursive,
             bindings,

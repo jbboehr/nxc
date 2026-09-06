@@ -8,6 +8,8 @@ pub enum Expr {
     Variable(String),
     /// Decoded parts, with no empty or adjacent literals. An empty vector is "".
     String(Vec<StringPart>),
+    /// Ordered, unevaluated elements; nesting is preserved.
+    List(Vec<Expr>),
     AttrSet {
         recursive: bool,
         bindings: Vec<Binding>,
@@ -151,6 +153,12 @@ impl Expr {
                 }
                 Self::Integer(_) => {}
                 Self::Variable(name) => validate_name(name).map_err(error)?,
+                Self::List(items) => {
+                    if items.len() > crate::MAX_TOKENS - count {
+                        return Err(error("list elements exceed the node limit"));
+                    }
+                    pending.extend(items.iter().map(|item| (item, depth + 1)));
+                }
                 Self::String(parts) => {
                     if parts.len() > crate::MAX_TOKENS - count {
                         return Err(error("string parts exceed the node limit"));

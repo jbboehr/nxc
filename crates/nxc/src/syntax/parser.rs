@@ -152,9 +152,21 @@ pub(super) fn parse(tokens: &[Token], source_len: usize) -> (Option<Node>, Vec<D
             });
         let nested = choice((
             nested_delimiters(
+                K::LBracket,
+                K::RBracket,
+                [
+                    (K::LParen, K::RParen),
+                    (K::LBrace, K::RBrace),
+                    (K::StringStart, K::StringEnd),
+                    (K::InterpolationStart, K::InterpolationEnd),
+                ],
+                |_| (),
+            ),
+            nested_delimiters(
                 K::LParen,
                 K::RParen,
                 [
+                    (K::LBracket, K::RBracket),
                     (K::LBrace, K::RBrace),
                     (K::StringStart, K::StringEnd),
                     (K::InterpolationStart, K::InterpolationEnd),
@@ -165,6 +177,7 @@ pub(super) fn parse(tokens: &[Token], source_len: usize) -> (Option<Node>, Vec<D
                 K::LBrace,
                 K::RBrace,
                 [
+                    (K::LBracket, K::RBracket),
                     (K::LParen, K::RParen),
                     (K::StringStart, K::StringEnd),
                     (K::InterpolationStart, K::InterpolationEnd),
@@ -175,6 +188,7 @@ pub(super) fn parse(tokens: &[Token], source_len: usize) -> (Option<Node>, Vec<D
                 K::StringStart,
                 K::StringEnd,
                 [
+                    (K::LBracket, K::RBracket),
                     (K::LParen, K::RParen),
                     (K::LBrace, K::RBrace),
                     (K::InterpolationStart, K::InterpolationEnd),
@@ -185,6 +199,7 @@ pub(super) fn parse(tokens: &[Token], source_len: usize) -> (Option<Node>, Vec<D
                 K::InterpolationStart,
                 K::InterpolationEnd,
                 [
+                    (K::LBracket, K::RBracket),
                     (K::LParen, K::RParen),
                     (K::LBrace, K::RBrace),
                     (K::StringStart, K::StringEnd),
@@ -199,6 +214,8 @@ pub(super) fn parse(tokens: &[Token], source_len: usize) -> (Option<Node>, Vec<D
                     .clone()
                     .or(none_of([
                         K::LParen,
+                        K::LBracket,
+                        K::RBracket,
                         K::LBrace,
                         K::StringStart,
                         K::InterpolationStart,
@@ -226,10 +243,12 @@ pub(super) fn parse(tokens: &[Token], source_len: usize) -> (Option<Node>, Vec<D
             .map_with(|bindings, e| Node::new(K::AttrSetExpr, e.span(), bindings));
 
         // Skip nested groups as a unit, stopping at the outer separator.
-        let argument = expr.clone().recover_with(via_parser(
+        let item = expr.clone().recover_with(via_parser(
             nested
                 .or(none_of([
                     K::LParen,
+                    K::LBracket,
+                    K::RBracket,
                     K::LBrace,
                     K::StringStart,
                     K::InterpolationStart,
@@ -245,14 +264,23 @@ pub(super) fn parse(tokens: &[Token], source_len: usize) -> (Option<Node>, Vec<D
                 .ignored()
                 .map_with(|_, e| Node::new(K::ErrorExpr, e.span(), vec![])),
         ));
-        let arguments = argument
+        // Parse each complete expression once. Missing commas do not cause
+        // backtracking into it to invent a shorter element boundary.
+        let list = item
+            .clone()
+            .then_ignore(just(K::Comma).or_not())
+            .repeated()
+            .collect::<Vec<_>>()
+            .delimited_by(just(K::LBracket), just(K::RBracket))
+            .map_with(|items, e| Node::new(K::ListExpr, e.span(), items));
+        let arguments = item
             .separated_by(just(K::Comma))
             .at_least(1)
             .allow_trailing()
             .collect::<Vec<_>>()
             .delimited_by(just(K::LParen), just(K::RParen));
 
-        let atom = choice((integer, variable, paren, attrset, string)).boxed();
+        let atom = choice((integer, variable, paren, attrset, string, list)).boxed();
         // Native `or` takes a simple expression: a call/arithmetic/lambda in
         // the fallback needs parentheses. Nested selections extend right.
         let simple = recursive(|simple| {

@@ -179,6 +179,7 @@ fn lower(node: ast::Expr, depth: usize) -> Result<Expr, Diagnostic> {
             function: Box::new(child(apply.lambda())?),
             argument: Box::new(child(apply.argument())?),
         }),
+        ast::Expr::List(list) => lower_list(list, depth),
         ast::Expr::Str(string) => {
             if !syntax(&string)
                 .first_token()
@@ -302,6 +303,26 @@ fn lower(node: ast::Expr, depth: usize) -> Result<Expr, Diagnostic> {
             syntax(&other).kind()
         ))),
     }
+}
+
+// Keep collection machinery out of the recursive lower frame.
+fn lower_list(list: ast::List, depth: usize) -> Result<Expr, Diagnostic> {
+    Ok(Expr::List(
+        list.items()
+            .map(|item| {
+                // rnix accepts bare lambdas as simple list elements;
+                // native Nix requires parentheses around them.
+                if matches!(item, ast::Expr::Lambda(_)) {
+                    let range = syntax(&item).text_range();
+                    return Err(Diagnostic::new(
+                        usize::from(range.start())..usize::from(range.end()),
+                        "native lambda list elements require parentheses",
+                    ));
+                }
+                lower(item, depth + 1)
+            })
+            .collect::<Result<_, _>>()?,
+    ))
 }
 
 fn lower_attr(attr: ast::Attr) -> Result<String, Diagnostic> {

@@ -15,6 +15,11 @@ fn render(expr: &Expr) -> String {
         Expr::Integer(value) => value.to_string(),
         Expr::Variable(name) => name.clone(),
         Expr::String(parts) => crate::emit::string(parts, render),
+        // Every non-simple expression is already parenthesized by render.
+        Expr::List(items) => format!(
+            "[{}]",
+            items.iter().map(render).collect::<Vec<_>>().join(" ")
+        ),
         Expr::AttrSet {
             recursive,
             bindings,

@@ -25,6 +25,7 @@ fn expressions() -> impl Strategy<Value = Expr> {
     ]
     .prop_recursive(5, 64, 2, |inner| {
         prop_oneof![
+            prop::collection::vec(inner.clone(), 0..4).prop_map(Expr::List),
             inner.clone().prop_map(|value| Expr::String(vec![
                 StringPart::Literal("prefix$".into()),
                 StringPart::Interpolation(value),

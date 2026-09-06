@@ -64,6 +64,7 @@ pub fn parse(source: &str) -> Parse {
         match token.kind {
             SyntaxKind::LParen
             | SyntaxKind::LBrace
+            | SyntaxKind::LBracket
             | SyntaxKind::StringStart
             | SyntaxKind::InterpolationStart => {
                 depth += 1;
@@ -71,6 +72,7 @@ pub fn parse(source: &str) -> Parse {
             }
             SyntaxKind::RParen
             | SyntaxKind::RBrace
+            | SyntaxKind::RBracket
             | SyntaxKind::StringEnd
             | SyntaxKind::InterpolationEnd => depth = depth.saturating_sub(1),
             _ => {}

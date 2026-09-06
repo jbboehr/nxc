@@ -25,6 +25,10 @@ pub enum SyntaxKind {
     LParen,
     #[token(")")]
     RParen,
+    #[token("[")]
+    LBracket,
+    #[token("]")]
+    RBracket,
     #[token(",")]
     Comma,
     #[token("+")]
@@ -79,6 +83,7 @@ pub enum SyntaxKind {
     AttrSetExpr,
     SelectExpr,
     StringExpr,
+    ListExpr,
     StringText,
     StringInterpolation,
     AttrPath,
@@ -126,6 +131,7 @@ impl SyntaxKind {
                 | Self::AttrSetExpr
                 | Self::SelectExpr
                 | Self::StringExpr
+                | Self::ListExpr
                 | Self::ErrorExpr
         )
     }
@@ -138,6 +144,8 @@ impl std::fmt::Display for SyntaxKind {
             Self::Integer => "integer",
             Self::LParen => "'('",
             Self::RParen => "')'",
+            Self::LBracket => "'['",
+            Self::RBracket => "']'",
             Self::Comma => "','",
             Self::Plus => "'+'",
             Self::Minus => "'-'",
@@ -184,6 +192,8 @@ impl rowan::Language for NxcLanguage {
             UnsupportedPath,
             LParen,
             RParen,
+            LBracket,
+            RBracket,
             Comma,
             Plus,
             Minus,
@@ -219,6 +229,7 @@ impl rowan::Language for NxcLanguage {
             AttrSetExpr,
             SelectExpr,
             StringExpr,
+            ListExpr,
             StringText,
             StringInterpolation,
             AttrPath,

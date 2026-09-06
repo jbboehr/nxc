@@ -104,7 +104,6 @@ fn malformed_and_dynamic_attributes_are_rejected_losslessly() {
         "s.${x}",
         "s.\"x\"",
         "s ? x",
-        "[1]",
         "let x = 1; in x",
     ] {
         let parsed = syntax::parse(source);

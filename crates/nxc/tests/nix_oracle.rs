@@ -360,3 +360,145 @@ fn interpolation_retains_nix_string_context() {
         assert_eq!(String::from_utf8(result.stdout).unwrap().trim(), "true");
     }
 }
+
+#[test]
+fn lists_preserve_order_boundaries_and_lazy_elements() {
+    if !nix_available() {
+        return;
+    }
+    for (source, native, expected) in [
+        ("[]", "[]", Some("[]")),
+        ("[3, 1, 3, 2]", "[3 1 3 2]", Some("[3,1,3,2]")),
+        ("[[] [1, 2] [3]]", "[[] [1 2] [3]]", Some("[[],[1,2],[3]]")),
+        (
+            r#"[1 "two" null { a = 3; }]"#,
+            r#"[1 "two" null { a = 3; }]"#,
+            Some(r#"[1,"two",null,{"a":3}]"#),
+        ),
+        ("[4 - 2]", "[(4 - 2)]", Some("[2]")),
+        ("[4, -2]", "[4 (-2)]", Some("[4,-2]")),
+        ("[f (2)]", "[(f 2)]", Some("[3]")),
+        (
+            "builtins.length([f, (2)])",
+            "builtins.length [f (2)]",
+            Some("2"),
+        ),
+        (
+            "builtins.length([f(2)])",
+            "builtins.length [(f 2)]",
+            Some("1"),
+        ),
+        (
+            "builtins.head([1, 1 / 0])",
+            "builtins.head [1 (1 / 0)]",
+            Some("1"),
+        ),
+        (
+            "builtins.length([1 / 0, 2])",
+            "builtins.length [(1 / 0) 2]",
+            Some("2"),
+        ),
+        (
+            "builtins.tail([1 / 0, 2])",
+            "builtins.tail [(1 / 0) 2]",
+            Some("[2]"),
+        ),
+        (
+            "builtins.elemAt([1, 1 / 0, 3], 2)",
+            "builtins.elemAt [1 (1 / 0) 3] 2",
+            Some("3"),
+        ),
+        (
+            "builtins.map(x => x + 1, [1, 2])",
+            "builtins.map (x: x + 1) [1 2]",
+            Some("[2,3]"),
+        ),
+        (
+            "builtins.length([x => x, ({a}) => a])",
+            "builtins.length [(x: x) ({a}: a)]",
+            Some("2"),
+        ),
+        ("(({}) => [1])({})", "({}: [1]) {}", Some("[1]")),
+        (
+            "{ a = [1]; }.a or [1 / 0]",
+            "{ a = [1]; }.a or [(1 / 0)]",
+            Some("[1]"),
+        ),
+        ("{}.a or [1, 2]", "{}.a or [1 2]", Some("[1,2]")),
+        (
+            "(rec { xs = [1, builtins.head(xs)]; }).xs",
+            "(rec { xs = [1 (builtins.head xs)]; }).xs",
+            Some("[1,1]"),
+        ),
+        ("[1, 1 / 0]", "[1 (1 / 0)]", None),
+        ("builtins.head([])", "builtins.head []", None),
+        ("[1](2)", "[1] 2", None),
+    ] {
+        let original = nix::import(native).unwrap();
+        let actual = parse_nxc(source).unwrap_or_else(|e| panic!("{source}: {e:?}"));
+        assert_eq!(actual, original, "{source}");
+        let converted = nxc::emit::nxc(&original).unwrap();
+        let generated = nix::emit(&parse_nxc(&converted).unwrap()).unwrap();
+        for value in [native, generated.as_str()] {
+            let expression = format!("let f = x: x + 1; in {value}");
+            let result = Command::new("nix-instantiate")
+                .args([
+                    "--store",
+                    "dummy://",
+                    "--eval",
+                    "--strict",
+                    "--json",
+                    "--expr",
+                    &expression,
+                ])
+                .output()
+                .unwrap();
+            if let Some(expected) = expected {
+                assert!(
+                    result.status.success(),
+                    "{expression}: {}",
+                    String::from_utf8_lossy(&result.stderr)
+                );
+                assert_eq!(
+                    String::from_utf8(result.stdout).unwrap().trim(),
+                    expected,
+                    "{expression}"
+                );
+            } else {
+                assert!(!result.status.success(), "{expression} must fail");
+            }
+        }
+    }
+}
+
+#[test]
+fn native_list_lambda_syntax_matches_nix() {
+    if !nix_available() {
+        return;
+    }
+    for (source, valid) in [
+        ("[x: x]", false),
+        ("[{}: 1]", false),
+        ("[{x}: x]", false),
+        ("[args@{}: args]", false),
+        ("[{}@args: args]", false),
+        ("[{}.a or x: x]", false),
+        ("[1 + 2]", false),
+        ("[-1]", false),
+        ("[(x: x)]", true),
+        ("[({x}: x)]", true),
+        ("[{}.a or (x: x)]", true),
+    ] {
+        let native = Command::new("nix-instantiate")
+            .args(["--store", "dummy://", "--parse", "--expr", source])
+            .output()
+            .unwrap();
+        assert_eq!(
+            native.status.success(),
+            valid,
+            "{source}: {}",
+            String::from_utf8_lossy(&native.stderr)
+        );
+        assert_eq!(nix::import(source).is_ok(), valid, "{source}");
+    }
+}

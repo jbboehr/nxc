@@ -51,6 +51,11 @@ impl Expression {
                 ir::validate_name(&name).map_err(error)?;
                 Ok(Expr::Variable(name))
             }
+            K::ListExpr => Ok(Expr::List(
+                children
+                    .map(|item| item.lower())
+                    .collect::<Result<_, _>>()?,
+            )),
             K::StringExpr => {
                 let mut parts = Vec::new();
                 for part in self.0.children() {

@@ -20,7 +20,7 @@ support is provided by `.envrc` (`direnv allow`).
 The current subset implements identifiers, integers, parentheses, arithmetic,
 calls, and simple/attribute-pattern lambdas in both conversion directions.
 It also includes static attrsets, dotted bindings, inheritance, and selections
-with defaults, plus double-quoted strings and interpolation. `nxc` provides
+with defaults, lists, double-quoted strings, and interpolation. `nxc` provides
 `check`, `to-nix`, and `from-nix`.
 `xtask` provides the corpus runner described in
 [the handoff](docs/HANDOFF.md). All crates currently disable publishing.
@@ -46,8 +46,9 @@ Tests cover source reconstruction, malformed input, argument recovery, semantic
 round trips, CLI output and error handling, and resource limits. Proptest checks
 arbitrary UTF-8 input and generated semantic expressions. The native Nix oracle
 checks generated syntax, precedence, currying, parameter scope, lazy defaults,
-argument validation, recursive set merges, inheritance, string coercion/context,
-and evaluation failures; it skips only when `nix-instantiate` is unavailable.
+argument validation, recursive set merges, inheritance, list boundaries/laziness,
+string coercion/context, and evaluation failures; it skips only when
+`nix-instantiate` is unavailable.
 Nix is provided in the dev
 shell and package checks. The oracle uses Nix's dummy store so it can run inside
 the package build sandbox without a daemon or writable Nix state directory.
@@ -133,7 +134,8 @@ own lexical rules.
 `syntax/parser.rs` uses Chumsky Pratt parsing to construct a temporary expression
 tree. `syntax/cst.rs` fills its spans with the original tokens to build an owned
 Rowan CST; `syntax/ast.rs` provides the typed expression view used for lowering.
-Recovery stops at call-argument separators, and any diagnostic blocks lowering.
+Recovery stops at call-argument/list commas or binding semicolons, skipping nested
+delimiter groups. Any diagnostic blocks lowering.
 Even invalid or unsupported input keeps a lossless CST, except when it exceeds
 the source-size limit.
 
@@ -166,6 +168,14 @@ Selections retain their full static path and optional lazy default. The parser
 uses Nix's simple-expression precedence for `or`; emitters parenthesize fallback
 expressions to preserve the IR. Attribute paths are bounded, and dotted bindings
 contribute their implicit attrset depth to the semantic nesting limit.
+
+List IR retains ordered, unevaluated elements and nested list boundaries. The
+nxc parser consumes each full element expression once and then accepts an
+optional comma; generated nxc always separates elements with commas. Native
+emission uses whitespace, with non-simple elements already parenthesized by
+the expression renderer. The native adapter rejects rnix's bare lambda list
+elements before lowering erases parentheses. Brackets count toward delimiter
+depth, and list elements pass the shared semantic validation and output limits.
 
 String IR retains decoded literal text and unevaluated interpolation expressions.
 Canonical parts contain no empty or adjacent literals; an empty vector represents
