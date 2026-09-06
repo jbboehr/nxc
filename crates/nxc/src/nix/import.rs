@@ -9,6 +9,37 @@ use rnix::{SyntaxKind as K, ast};
 /// Parse native Nix through rnix and adapt only supported forms to the semantic IR.
 /// Native syntax-node types never cross this module's public boundary.
 pub fn import(source: &str) -> Result<Expr, Vec<Diagnostic>> {
+    parse(source)?.lower()
+}
+
+/// A native syntax tree that passed parsing and compatibility/resource checks.
+#[derive(Debug, Clone)]
+pub struct Parsed {
+    root: ast::Root,
+    source_len: usize,
+}
+
+impl Parsed {
+    /// Adapt supported native forms to the semantic IR without reparsing.
+    pub fn lower(&self) -> Result<Expr, Vec<Diagnostic>> {
+        let root = self.root.expr().ok_or_else(|| {
+            vec![Diagnostic::new(
+                0..self.source_len,
+                "missing native Nix expression",
+            )]
+        })?;
+        let result = lower(root, 1).map_err(|e| vec![e])?;
+        result.validate().map_err(|mut e| {
+            e.span = 0..self.source_len;
+            vec![e]
+        })?;
+        Ok(result)
+    }
+}
+
+/// Parse native syntax separately from lowering, including preflight checks.
+/// Parsing success does not imply that the syntax is supported by lowering.
+pub fn parse(source: &str) -> Result<Parsed, Vec<Diagnostic>> {
     check_source(source).map_err(|e| vec![e])?;
     let parsed = rnix::Root::parse(source);
     if !parsed.errors().is_empty() {
@@ -29,18 +60,10 @@ pub fn import(source: &str) -> Result<Expr, Vec<Diagnostic>> {
             })
             .collect());
     }
-    let root = parsed.tree().expr().ok_or_else(|| {
-        vec![Diagnostic::new(
-            0..source.len(),
-            "missing native Nix expression",
-        )]
-    })?;
-    let result = lower(root, 1).map_err(|e| vec![e])?;
-    result.validate().map_err(|mut e| {
-        e.span = 0..source.len();
-        vec![e]
-    })?;
-    Ok(result)
+    Ok(Parsed {
+        root: parsed.tree(),
+        source_len: source.len(),
+    })
 }
 
 pub(super) fn check_source(source: &str) -> Result<(), Diagnostic> {

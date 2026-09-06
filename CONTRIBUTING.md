@@ -19,7 +19,7 @@ support is provided by `.envrc` (`direnv allow`).
 
 The first expression slice implements identifiers, integers, parentheses,
 arithmetic, and calls in both conversion directions. `nxc` provides `check`,
-`to-nix`, and `from-nix`. `xtask` remains a placeholder for the corpus runner in
+`to-nix`, and `from-nix`. `xtask` provides the corpus runner described in
 [the handoff](docs/HANDOFF.md). All crates currently disable publishing.
 
 ```sh
@@ -72,6 +72,45 @@ untracked checkout, use `nix develop path:.`, `nix build path:.`, and
 work. Re-run `cargo generate-lockfile` after dependency changes and
 `nix flake update` when updating the toolchain or Nix dependencies.
 
+## Corpus coverage
+
+Run against an external directory, such as a nixpkgs checkout:
+
+```sh
+cargo xtask corpus /path/to/nixpkgs
+cargo xtask corpus /path/to/nixpkgs --filter pkgs/by-name/ --fail-fast
+```
+
+The runner discovers regular `.nix` files recursively, skips `.git` directories
+and symbolic links below the root, and processes files in sorted path order.
+The root itself may be a symlink to a directory. `--filter` is a case-sensitive
+literal substring of the path relative to the root; it is not a glob or regex.
+
+Each selected file runs through `Nix → IR₁ → nxc → IR₂ → Nix → IR₃`.
+Both generated expressions must preserve the original canonical IR. Source text
+is not compared, files are not rewritten, and the runner uses in-process parsers
+without evaluating expressions or invoking Nix per file.
+
+Stdout reports discovered, selected, and processed file counts, followed by
+success/failure counts for reading, parsing, lowering, emission, and each IR
+comparison. A file stops at its first failed stage. Stderr records that failure's
+relative path, stage, and first diagnostic (with byte span when available).
+Spans refer to the input of the named stage, which may be generated source.
+
+Exit status is zero only if at least one file is selected and every selected file
+completes the round trip. Unsupported syntax, malformed input, resource limits,
+read failures, and an empty selection return status 1. By default, per-file
+failures do not stop later files. `--fail-fast` stops processing after the first
+failed file, while discovered/selected counts still describe the full selection.
+Discovery errors abort before processing because the file list is incomplete.
+
+Native parse counts include the library's compatibility and resource preflight
+checks. Lowering is counted separately, so valid unsupported forms such as
+attrsets and lambdas are distinguishable from parse failures. Coverage is
+expected to be low until those syntax forms are implemented. Small temporary
+corpora in the xtask tests exercise reporting and failure handling; no nixpkgs
+checkout is required by the test suite or vendored into this repository.
+
 ## License provenance
 
 `LICENSE.md` and `docs/LICENSE_EXCEPTION.md` were copied verbatim from
@@ -97,6 +136,11 @@ unary and parentheses and source metadata do not participate in equality.
 `canonical()` is an identity view for this subset: no constant folding or other
 evaluation takes place. In particular, `true`, `false`, and `null` remain variable
 references, preserving Nix shadowing behavior.
+
+`nix::parse` returns an owned `nix::Parsed` wrapper with a separate `lower()`
+operation, allowing the corpus runner to count parsing and lowering without
+parsing twice. rnix types remain private. `nix::import` still performs both steps
+for callers that only need the IR.
 
 Diagnostics carry byte spans separately from the IR. The nxc CST retains the
 source locations; CLI diagnostics attach the originating file path. Emitters

@@ -3,4 +3,4 @@
 mod emit;
 mod import;
 pub use emit::emit;
-pub use import::import;
+pub use import::{Parsed, import, parse};
