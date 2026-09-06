@@ -9,7 +9,8 @@ A C/Rust-flavored concrete syntax for Nix with unchanged Nix evaluation semantic
 
 The current subset supports identifiers, integer literals, parentheses,
 arithmetic (`+`, `-`, `*`, `/`, and unary `-`), curried function calls, and lambdas
-with simple or attribute-pattern parameters.
+with simple or attribute-pattern parameters. Static attrsets and attribute
+selections are also supported.
 
 For example, `f(1 + 2, x)` converts to native Nix equivalent to `f (1 + 2) x`.
 Conversion preserves the expression's structure and leaves evaluation to Nix.
@@ -49,16 +50,39 @@ the pattern, as in `({ x ? 1 }@args) => args`. Captures preserve the supplied
 argument, without adding values supplied by defaults. Pattern fields are
 comma-separated; a trailing comma is allowed after a field, but not after `...`.
 
+Attrsets use Nix's semicolon-terminated bindings, including `rec`, dotted paths,
+and both forms of `inherit`:
+
+```nix
+(rec { a = b + 1; b = 2; }).a
+{ a.b = 1; a.c = 2; }
+{ inherit x; inherit (source) y; }
+(fn({ x }) => x + 1)({ x = 2; })
+```
+
+Bindings and selections currently accept bare static attribute names, including
+attribute names such as `fn`, `yield`, and `or`. Binding conflicts are rejected;
+literal nested attrsets merge according to Nix's rules. Values remain lazy, and
+`inherit x` retains its enclosing-scope lookup even inside a recursive attrset.
+
+Use `value.a.b` to select an attribute and `value.a or fallback` for a missing
+attribute. `or` keeps Nix's tight precedence: `s.f or fallback(x)` means
+`(s.f or fallback)(x)`, and `s.a or 2 + 3` means `(s.a or 2) + 3`. Parenthesize
+a call or arithmetic expression to use the whole expression as the fallback,
+as in `s.a or (fallback(x))`. Existing attributes are returned without evaluating
+the fallback; failures while evaluating an existing value are preserved.
+
 Native `#` line comments must use LF or CRLF endings. Bare-CR line comments are
 currently rejected by `from-nix`.
 
 Inputs are currently limited to 1 MiB, 1,024 non-trivia tokens, and 128 levels of
 parenthesis, brace, or semantic-expression nesting. Integer literals range from
 `0` to `9223372036854775807`; negative values use unary `-`.
-Generated output must fit these limits as well.
+Attribute paths have at most 128 components, and dotted bindings count toward
+semantic nesting. Generated output must fit these limits as well.
 
-The broader syntax below is planned; attrset expressions, lists, selections,
-`let`, strings, and paths are not implemented yet.
+The broader syntax below is planned; lists, `let`, strings, quoted/dynamic
+attributes, attribute-existence tests (`?`), and paths are not implemented yet.
 
 ```nix
 # Nix

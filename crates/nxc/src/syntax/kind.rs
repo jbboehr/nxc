@@ -49,6 +49,18 @@ pub enum SyntaxKind {
     Ellipsis,
     #[token("@")]
     At,
+    #[token(".")]
+    Dot,
+    #[token("=")]
+    Assign,
+    #[token(";")]
+    Semicolon,
+    #[token("rec")]
+    Rec,
+    #[token("inherit")]
+    Inherit,
+    #[token("or")]
+    Or,
     ErrorToken,
     Root,
     IntegerExpr,
@@ -58,6 +70,14 @@ pub enum SyntaxKind {
     NegateExpr,
     BinaryExpr,
     LambdaExpr,
+    AttrSetExpr,
+    SelectExpr,
+    AttrPath,
+    AttrName,
+    AssignBinding,
+    InheritBinding,
+    InheritSource,
+    ErrorBinding,
     IdentPattern,
     AttrPattern,
     Formal,
@@ -94,6 +114,8 @@ impl SyntaxKind {
                 | Self::NegateExpr
                 | Self::BinaryExpr
                 | Self::LambdaExpr
+                | Self::AttrSetExpr
+                | Self::SelectExpr
                 | Self::ErrorExpr
         )
     }
@@ -118,6 +140,12 @@ impl std::fmt::Display for SyntaxKind {
             Self::Question => "'?'",
             Self::Ellipsis => "'...'",
             Self::At => "'@'",
+            Self::Dot => "'.'",
+            Self::Assign => "'='",
+            Self::Semicolon => "';'",
+            Self::Rec => "'rec'",
+            Self::Inherit => "'inherit'",
+            Self::Or => "'or'",
             _ => "unsupported token",
         };
         f.write_str(name)
@@ -153,6 +181,12 @@ impl rowan::Language for NxcLanguage {
             Question,
             Ellipsis,
             At,
+            Dot,
+            Assign,
+            Semicolon,
+            Rec,
+            Inherit,
+            Or,
             ErrorToken,
             Root,
             IntegerExpr,
@@ -162,6 +196,14 @@ impl rowan::Language for NxcLanguage {
             NegateExpr,
             BinaryExpr,
             LambdaExpr,
+            AttrSetExpr,
+            SelectExpr,
+            AttrPath,
+            AttrName,
+            AssignBinding,
+            InheritBinding,
+            InheritSource,
+            ErrorBinding,
             IdentPattern,
             AttrPattern,
             Formal,

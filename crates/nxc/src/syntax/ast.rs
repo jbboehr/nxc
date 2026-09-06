@@ -3,7 +3,7 @@
 use super::{NxcLanguage, SyntaxKind as K, SyntaxNode};
 use crate::{
     Diagnostic,
-    ir::{BinaryOp, Expr, Formal, Pattern},
+    ir::{self, BinaryOp, Binding, Expr, Formal, Pattern},
 };
 use rowan::ast::AstNode;
 
@@ -46,7 +46,59 @@ impl Expression {
                     .map_err(|_| error("integer literal is out of range"))?;
                 Ok(Expr::Integer(value))
             }
-            K::VariableExpr => Ok(Expr::Variable(self.0.text().to_string())),
+            K::VariableExpr => {
+                let name = self.0.text().to_string();
+                ir::validate_name(&name).map_err(error)?;
+                Ok(Expr::Variable(name))
+            }
+            K::AttrSetExpr => Ok(Expr::AttrSet {
+                recursive: self
+                    .0
+                    .children_with_tokens()
+                    .filter_map(|it| it.into_token())
+                    .any(|token| token.kind() == K::Rec),
+                bindings: self
+                    .0
+                    .children()
+                    .map(|binding| match binding.kind() {
+                        K::AssignBinding => Ok(Binding::Assign {
+                            path: lower_path(&binding)?,
+                            value: binding
+                                .children()
+                                .find_map(Self::cast)
+                                .ok_or_else(|| error("missing binding value"))?
+                                .lower()?,
+                        }),
+                        K::InheritBinding => Ok(Binding::Inherit {
+                            source: binding
+                                .children()
+                                .find(|n| n.kind() == K::InheritSource)
+                                .map(|source| {
+                                    source
+                                        .children()
+                                        .find_map(Self::cast)
+                                        .ok_or_else(|| error("missing inheritance source"))?
+                                        .lower()
+                                })
+                                .transpose()?,
+                            names: binding
+                                .children()
+                                .filter(|n| n.kind() == K::AttrName)
+                                .map(|name| name.text().to_string())
+                                .collect(),
+                        }),
+                        _ => Err(error("cannot lower an erroneous binding")),
+                    })
+                    .collect::<Result<_, _>>()?,
+            }),
+            K::SelectExpr => Ok(Expr::Select {
+                value: Box::new(child()?),
+                path: lower_path(&self.0)?,
+                default: children
+                    .next()
+                    .map(|expr| expr.lower().map(Box::new))
+                    .transpose()?,
+            }),
             K::ParenExpr => child(),
             K::NegateExpr => Ok(Expr::Negate(Box::new(child()?))),
             K::LambdaExpr => {
@@ -92,6 +144,24 @@ impl Expression {
             _ => Err(error("cannot lower an erroneous expression")),
         }
     }
+}
+
+fn lower_path(node: &SyntaxNode) -> Result<Vec<String>, Diagnostic> {
+    let path = node
+        .children()
+        .find(|node| node.kind() == K::AttrPath)
+        .ok_or_else(|| {
+            let range = node.text_range();
+            Diagnostic::new(
+                usize::from(range.start())..usize::from(range.end()),
+                "missing attribute path",
+            )
+        })?;
+    Ok(path
+        .children()
+        .filter(|node| node.kind() == K::AttrName)
+        .map(|node| node.text().to_string())
+        .collect())
 }
 
 fn lower_pattern(node: &SyntaxNode) -> Result<Pattern, Diagnostic> {

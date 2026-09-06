@@ -7,10 +7,7 @@ pub mod lexer;
 mod parser;
 pub use kind::{NxcLanguage, SyntaxKind};
 
-use crate::{
-    Diagnostic, MAX_DEPTH, MAX_SOURCE_BYTES, MAX_TOKENS,
-    ir::{self, Expr},
-};
+use crate::{Diagnostic, MAX_DEPTH, MAX_SOURCE_BYTES, MAX_TOKENS, ir::Expr};
 use rowan::ast::AstNode;
 pub type SyntaxNode = rowan::SyntaxNode<NxcLanguage>;
 
@@ -87,7 +84,6 @@ pub fn parse(source: &str) -> Parse {
             let message = match token.kind {
                 SyntaxKind::ErrorToken => Some("invalid or unsupported token"),
                 SyntaxKind::UnsupportedPath => Some("path expressions are not supported yet"),
-                SyntaxKind::Ident => ir::validate_name(text).err(),
                 SyntaxKind::Integer if text.parse::<i64>().is_err() => {
                     Some("integer literal exceeds the Nix signed 64-bit range")
                 }

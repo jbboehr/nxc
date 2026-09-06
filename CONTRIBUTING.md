@@ -19,7 +19,9 @@ support is provided by `.envrc` (`direnv allow`).
 
 The current subset implements identifiers, integers, parentheses, arithmetic,
 calls, and simple/attribute-pattern lambdas in both conversion directions.
-`nxc` provides `check`, `to-nix`, and `from-nix`. `xtask` provides the corpus runner described in
+It also includes static attrsets, dotted bindings, inheritance, and selections
+with defaults. `nxc` provides `check`, `to-nix`, and `from-nix`.
+`xtask` provides the corpus runner described in
 [the handoff](docs/HANDOFF.md). All crates currently disable publishing.
 
 ```sh
@@ -43,7 +45,7 @@ Tests cover source reconstruction, malformed input, argument recovery, semantic
 round trips, CLI output and error handling, and resource limits. Proptest checks
 arbitrary UTF-8 input and generated semantic expressions. The native Nix oracle
 checks generated syntax, precedence, currying, parameter scope, lazy defaults,
-argument validation, and evaluation failures;
+argument validation, recursive set merges, inheritance, and evaluation failures;
 it skips only when `nix-instantiate` is unavailable. Nix is provided in the dev
 shell and package checks. The oracle uses Nix's dummy store so it can run inside
 the package build sandbox without a daemon or writable Nix state directory.
@@ -107,7 +109,7 @@ Discovery errors abort before processing because the file list is incomplete.
 
 Native parse counts include the library's compatibility and resource preflight
 checks. Lowering is counted separately, so valid unsupported forms such as
-attrsets and selections are distinguishable from parse failures. Coverage is
+strings and `let` expressions are distinguishable from parse failures. Coverage is
 expected to be low until those syntax forms are implemented. Small temporary
 corpora in the xtask tests exercise reporting and failure handling; no nixpkgs
 checkout is required by the test suite or vendored into this repository.
@@ -145,6 +147,20 @@ Duplicate parameter names, including collisions with the whole-argument
 binding, are rejected. Default expressions remain in the parameter scope;
 conversion does not insert defaults into the captured argument or evaluate them.
 
+Attrset IR retains binding order, dotted paths, recursive flags, and inheritance
+sources. Avoid sorting or expanding bindings: when Nix merges literal nested
+sets, the first declaration's recursive flag can affect scope. Structural
+validation checks static binding conflicts after the entire IR passes resource
+bounds. Inheritance remains distinct from assignment to preserve its scope.
+Static attribute names have separate validation from variable names; bare names
+such as `fn` and `or` are permitted in attribute positions. Quoted and dynamic
+attributes remain unsupported.
+
+Selections retain their full static path and optional lazy default. The parser
+uses Nix's simple-expression precedence for `or`; emitters parenthesize fallback
+expressions to preserve the IR. Attribute paths are bounded, and dotted bindings
+contribute their implicit attrset depth to the semantic nesting limit.
+
 `nix::parse` returns an owned `nix::Parsed` wrapper with a separate `lower()`
 operation, allowing the corpus runner to count parsing and lowering without
 parsing twice. rnix types remain private. `nix::import` still performs both steps
@@ -153,8 +169,9 @@ for callers that only need the IR.
 Diagnostics carry byte spans separately from the IR. The nxc CST retains the
 source locations; CLI diagnostics attach the originating file path. Emitters
 validate IR supplied by callers and add parentheses conservatively. Paths are
-neither resolved nor rewritten. Reserved keywords, `__curPos`, and `__nxc_*`
-intrinsics are rejected until their semantics are implemented.
+neither resolved nor rewritten. Reserved variable names, `__curPos`, and
+`__nxc_*` intrinsics are rejected in expression positions until their semantics
+are implemented.
 
 The limits in `lib.rs` are intentionally conservative for this slice. Both
 parsers reject excessive source size, token count, or nesting, and emitters

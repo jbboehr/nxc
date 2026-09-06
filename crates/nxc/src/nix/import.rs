@@ -2,9 +2,12 @@
 
 use crate::{
     Diagnostic, MAX_DEPTH, MAX_SOURCE_BYTES, MAX_TOKENS,
-    ir::{self, BinaryOp, Expr, Formal, Pattern},
+    ir::{self, BinaryOp, Binding, Expr, Formal, Pattern},
 };
-use rnix::{SyntaxKind as K, ast};
+use rnix::{
+    SyntaxKind as K,
+    ast::{self, HasEntry},
+};
 
 /// Parse native Nix through rnix and adapt only supported forms to the semantic IR.
 /// Native syntax-node types never cross this module's public boundary.
@@ -170,6 +173,50 @@ fn lower(node: ast::Expr, depth: usize) -> Result<Expr, Diagnostic> {
             function: Box::new(child(apply.lambda())?),
             argument: Box::new(child(apply.argument())?),
         }),
+        ast::Expr::AttrSet(set) => Ok(Expr::AttrSet {
+            recursive: set.rec_token().is_some(),
+            bindings: set
+                .entries()
+                .map(|entry| match entry {
+                    ast::Entry::AttrpathValue(binding) => {
+                        let path = lower_path(binding.attrpath())?;
+                        let value = lower(
+                            binding
+                                .value()
+                                .ok_or_else(|| error("missing binding value"))?,
+                            depth + path.len(),
+                        )?;
+                        Ok(Binding::Assign { path, value })
+                    }
+                    ast::Entry::Inherit(inherit) => Ok(Binding::Inherit {
+                        source: inherit
+                            .from()
+                            .map(|source| child(source.expr()))
+                            .transpose()?,
+                        names: inherit.attrs().map(lower_attr).collect::<Result<_, _>>()?,
+                    }),
+                })
+                .collect::<Result<_, Diagnostic>>()?,
+        }),
+        ast::Expr::Select(select) => Ok(Expr::Select {
+            value: Box::new(child(select.expr())?),
+            path: lower_path(select.attrpath())?,
+            default: select
+                .default_expr()
+                .map(|value| {
+                    // rnix accepts bare lambdas here, but Nix requires parentheses.
+                    // Check before lowering erases the parenthesized AST wrapper.
+                    if matches!(value, ast::Expr::Lambda(_)) {
+                        let range = syntax(&value).text_range();
+                        return Err(Diagnostic::new(
+                            usize::from(range.start())..usize::from(range.end()),
+                            "native lambda selection defaults require parentheses",
+                        ));
+                    }
+                    lower(value, depth + 1).map(Box::new)
+                })
+                .transpose()?,
+        }),
         ast::Expr::Lambda(lambda) => {
             let name = |ident: Option<ast::Ident>| {
                 ident
@@ -228,4 +275,29 @@ fn lower(node: ast::Expr, depth: usize) -> Result<Expr, Diagnostic> {
             syntax(&other).kind()
         ))),
     }
+}
+
+fn lower_attr(attr: ast::Attr) -> Result<String, Diagnostic> {
+    let range = syntax(&attr).text_range();
+    let error = |message| {
+        Diagnostic::new(
+            usize::from(range.start())..usize::from(range.end()),
+            message,
+        )
+    };
+    match attr {
+        ast::Attr::Ident(ident) => {
+            let name = syntax(&ident).text().to_string();
+            ir::validate_attr_name(&name).map_err(error)?;
+            Ok(name)
+        }
+        _ => Err(error("quoted and dynamic attributes are not supported yet")),
+    }
+}
+
+fn lower_path(path: Option<ast::Attrpath>) -> Result<Vec<String>, Diagnostic> {
+    path.ok_or_else(|| Diagnostic::new(0..0, "missing native attribute path"))?
+        .attrs()
+        .map(lower_attr)
+        .collect()
 }

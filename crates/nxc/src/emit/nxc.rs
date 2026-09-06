@@ -41,6 +41,15 @@ fn render(expr: &Expr) -> String {
     match expr {
         Expr::Integer(value) => value.to_string(),
         Expr::Variable(name) => name.clone(),
+        Expr::AttrSet {
+            recursive,
+            bindings,
+        } => super::attrset(*recursive, bindings, render),
+        Expr::Select {
+            value,
+            path,
+            default,
+        } => super::selection(value, path, default.as_deref(), render),
         Expr::Lambda { parameter, body } => {
             let spelling = super::pattern(parameter, render);
             let parameter = match parameter {

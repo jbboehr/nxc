@@ -14,6 +14,15 @@ fn render(expr: &Expr) -> String {
     match expr {
         Expr::Integer(value) => value.to_string(),
         Expr::Variable(name) => name.clone(),
+        Expr::AttrSet {
+            recursive,
+            bindings,
+        } => crate::emit::attrset(*recursive, bindings, render),
+        Expr::Select {
+            value,
+            path,
+            default,
+        } => crate::emit::selection(value, path, default.as_deref(), render),
         Expr::Lambda { parameter, body } => {
             format!(
                 "({}: {})",

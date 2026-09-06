@@ -116,10 +116,62 @@ pub(super) fn parse(tokens: &[Token], source_len: usize) -> (Option<Node>, Vec<D
                 Node::new(K::LambdaExpr, e.span(), vec![parameter, body])
             });
 
-        // Skip nested parentheses as a unit, stopping at the outer separator.
+        let attr_name = one_of([K::Ident, K::Or, K::Fn])
+            .map_with(|_, e| Node::new(K::AttrName, e.span(), vec![]));
+        let path = attr_name
+            .separated_by(just(K::Dot))
+            .at_least(1)
+            .collect::<Vec<_>>()
+            .map_with(|names, e| Node::new(K::AttrPath, e.span(), names));
+        let assignment = path
+            .then_ignore(just(K::Assign))
+            .then(expr.clone())
+            .map_with(|(path, value), e| Node::new(K::AssignBinding, e.span(), vec![path, value]));
+        let inherit_source = expr
+            .clone()
+            .delimited_by(just(K::LParen), just(K::RParen))
+            .map_with(|source, e| Node::new(K::InheritSource, e.span(), vec![source]));
+        let inherit = just(K::Inherit)
+            .ignore_then(inherit_source.or_not())
+            .then(attr_name.repeated().collect::<Vec<_>>())
+            .map_with(|(source, names), e| {
+                let mut children: Vec<_> = source.into_iter().collect();
+                children.extend(names);
+                Node::new(K::InheritBinding, e.span(), children)
+            });
+        let nested = choice((
+            nested_delimiters(K::LParen, K::RParen, [(K::LBrace, K::RBrace)], |_| ()),
+            nested_delimiters(K::LBrace, K::RBrace, [(K::LParen, K::RParen)], |_| ()),
+        ));
+        let binding = choice((assignment, inherit))
+            .then_ignore(just(K::Semicolon))
+            .recover_with(via_parser(
+                nested
+                    .clone()
+                    .or(
+                        none_of([K::LParen, K::LBrace, K::Semicolon, K::RBrace, K::RParen])
+                            .ignored(),
+                    )
+                    .repeated()
+                    .at_least(1)
+                    .ignored()
+                    .then_ignore(just(K::Semicolon).or_not())
+                    .map_with(|_, e| Node::new(K::ErrorBinding, e.span(), vec![])),
+            ));
+        let attrset = just(K::Rec)
+            .or_not()
+            .ignore_then(
+                binding
+                    .repeated()
+                    .collect::<Vec<_>>()
+                    .delimited_by(just(K::LBrace), just(K::RBrace)),
+            )
+            .map_with(|bindings, e| Node::new(K::AttrSetExpr, e.span(), bindings));
+
+        // Skip nested groups as a unit, stopping at the outer separator.
         let argument = expr.clone().recover_with(via_parser(
-            nested_delimiters(K::LParen, K::RParen, [], |_| ())
-                .or(none_of([K::LParen, K::Comma, K::RParen]).ignored())
+            nested
+                .or(none_of([K::LParen, K::LBrace, K::Comma, K::RParen, K::RBrace]).ignored())
                 .repeated()
                 .at_least(1)
                 .ignored()
@@ -132,12 +184,45 @@ pub(super) fn parse(tokens: &[Token], source_len: usize) -> (Option<Node>, Vec<D
             .collect::<Vec<_>>()
             .delimited_by(just(K::LParen), just(K::RParen));
 
-        let arithmetic = choice((integer, variable, paren)).pratt((
+        let atom = choice((integer, variable, paren, attrset)).boxed();
+        // Native `or` takes a simple expression: a call/arithmetic/lambda in
+        // the fallback needs parentheses. Nested selections extend right.
+        let simple = recursive(|simple| {
+            atom.clone()
+                .then(
+                    just(K::Dot)
+                        .ignore_then(path)
+                        .then(just(K::Or).ignore_then(simple).or_not())
+                        .or_not(),
+                )
+                .map_with(|(value, selection), e| {
+                    if let Some((path, default)) = selection {
+                        let mut children = vec![value, path];
+                        children.extend(default);
+                        Node::new(K::SelectExpr, e.span(), children)
+                    } else {
+                        value
+                    }
+                })
+        });
+        let selection = just(K::Dot)
+            .ignore_then(path)
+            .then(just(K::Or).ignore_then(simple).or_not());
+        let arithmetic = atom.pratt((
             postfix(4, arguments, |function, arguments: Vec<Node>, e| {
                 let mut children = vec![function];
                 children.extend(arguments);
                 Node::new(K::CallExpr, e.span(), children)
             }),
+            postfix(
+                4,
+                selection,
+                |value, (path, default): (Node, Option<Node>), e| {
+                    let mut children = vec![value, path];
+                    children.extend(default);
+                    Node::new(K::SelectExpr, e.span(), children)
+                },
+            ),
             prefix(3, just(K::Minus), |_, operand, e| {
                 Node::new(K::NegateExpr, e.span(), vec![operand])
             }),

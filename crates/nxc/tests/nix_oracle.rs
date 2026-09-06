@@ -168,3 +168,93 @@ fn lambdas_preserve_scope_currying_lazy_defaults_and_argument_checks() {
         }
     }
 }
+
+#[test]
+fn native_selection_default_syntax_matches_nix() {
+    if !nix_available() {
+        return;
+    }
+    for (source, accepted) in [
+        ("{}.a or x: x", false),
+        ("{}.a or { x }: x", false),
+        ("{}.a or args@{ x }: x", false),
+        ("{}.a or { x }@args: x", false),
+        ("{}.a or {}.b or x: x", false),
+        ("{}.a or (x: x)", true),
+        ("{}.a or ({ x }: x)", true),
+        ("{}.a or {}.b or (x: x)", true),
+        ("{}.a or { f = x: x; }", true),
+        ("{ f ? x: x }: f", true),
+    ] {
+        let parsed = Command::new("nix-instantiate")
+            .args(["--store", "dummy://", "--parse", "--expr", source])
+            .output()
+            .unwrap();
+        assert_eq!(parsed.status.success(), accepted, "native Nix: {source}");
+        assert_eq!(nix::import(source).is_ok(), accepted, "importer: {source}");
+    }
+}
+
+#[test]
+fn attrsets_preserve_merging_recursion_inheritance_and_lazy_selection() {
+    if !nix_available() {
+        return;
+    }
+    for (source, expected) in [
+        ("(rec { a = b + 1; b = 2; }).a", Some("3")),
+        ("({ a.b = 1; a.c = 2; }).a", Some("{\"b\":1,\"c\":2}")),
+        ("({ a = rec { b = c; }; a.c = 2; }).a.b", Some("2")),
+        ("({ a.b = c; a = rec { c = 2; }; }).a.b", Some("10")),
+        ("({ a = { b = c; }; a = rec { c = 2; }; }).a.b", Some("10")),
+        ("({ a = rec { b = c; }; a = { c = 2; }; }).a.b", Some("2")),
+        ("(rec { inherit x; y = x; }).y", Some("7")),
+        ("(rec { inherit (src) x; src = { x = 8; }; }).x", Some("8")),
+        ("{ inherit (1 / 0); }", Some("{}")),
+        ("{ unused = 1 / 0; a = 4; }.a", Some("4")),
+        ("{ a = 5; }.a or (1 / 0)", Some("5")),
+        ("{}.a.b or 6", Some("6")),
+        ("{ a = 1; }.a.b or 6", Some("6")),
+        ("{ a = 5; }.a or 2 + 3", Some("8")),
+        ("{ a = f; }.a or 0 2", Some("3")),
+        ("{ a = 5; }.a or (f 2)", Some("5")),
+        ("({ x, y ? x + 1 }: y) { x = 2; }", Some("3")),
+        ("({ fn = 1; yield = 2; or = 3; }).or", Some("3")),
+        ("{}.a", None),
+        ("{ a = 1 / 0; }.a or 4", None),
+        ("(1 / 0).a or 4", None),
+        ("(rec { a = a; }).a", None),
+    ] {
+        let original = nix::import(source).unwrap_or_else(|e| panic!("{source}: {e:?}"));
+        let converted = nxc::emit::nxc(&original).unwrap();
+        let generated = nix::emit(&parse_nxc(&converted).unwrap()).unwrap();
+        for value in [source, generated.as_str()] {
+            let expression = format!("let x = 7; c = 10; f = x: x + 1; in {value}");
+            let result = Command::new("nix-instantiate")
+                .args([
+                    "--store",
+                    "dummy://",
+                    "--eval",
+                    "--strict",
+                    "--json",
+                    "--expr",
+                    &expression,
+                ])
+                .output()
+                .unwrap();
+            if let Some(expected) = expected {
+                assert!(
+                    result.status.success(),
+                    "{expression}: {}",
+                    String::from_utf8_lossy(&result.stderr)
+                );
+                assert_eq!(
+                    String::from_utf8(result.stdout).unwrap().trim(),
+                    expected,
+                    "{expression}"
+                );
+            } else {
+                assert!(!result.status.success(), "{expression} must fail");
+            }
+        }
+    }
+}
