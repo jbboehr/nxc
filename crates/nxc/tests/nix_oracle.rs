@@ -335,6 +335,7 @@ fn interpolation_retains_nix_string_context() {
         r#"with { y = x; }; "a${y}b""#,
         r#"if true then "a${x}b" else "unused""#,
         r#"if false then "unused" else "a${x}b""#,
+        r#"assert true; "a${x}b""#,
     ] {
         let converted = nxc::emit::nxc(&nix::import(source).unwrap()).unwrap();
         let generated = nix::emit(&parse_nxc(&converted).unwrap()).unwrap();

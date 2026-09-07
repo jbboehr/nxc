@@ -2,7 +2,7 @@
 
 use super::{NxcLanguage, SyntaxKind as K, SyntaxNode};
 use crate::{
-    Diagnostic,
+    Diagnostic, MAX_DEPTH,
     ir::{self, BinaryOp, Binding, Expr, Formal, Pattern, StringPart},
 };
 use rowan::ast::AstNode;
@@ -25,7 +25,16 @@ impl AstNode for Expression {
 }
 
 impl Expression {
-    pub(super) fn lower(&self) -> Result<Expr, Diagnostic> {
+    pub(super) fn lower(&self, depth: usize) -> Result<Expr, Diagnostic> {
+        // Reject excessive recursion before building the IR. Delimiter-free
+        // chains can pass parser preflight but exceed the semantic depth limit.
+        if depth > MAX_DEPTH {
+            let span = self.0.text_range();
+            return Err(Diagnostic::new(
+                usize::from(span.start())..usize::from(span.end()),
+                "expression exceeds the nesting limit",
+            ));
+        }
         // Generated output parenthesizes semantic operations. These wrappers
         // must not add a full recursive lowering frame at each nesting level.
         let mut expr = self.clone();
@@ -38,10 +47,10 @@ impl Expression {
                 )
             })?;
         }
-        expr.lower_unparenthesized()
+        expr.lower_unparenthesized(depth)
     }
 
-    fn lower_unparenthesized(&self) -> Result<Expr, Diagnostic> {
+    fn lower_unparenthesized(&self, depth: usize) -> Result<Expr, Diagnostic> {
         let span = self.0.text_range();
         let error =
             |message| Diagnostic::new(usize::from(span.start())..usize::from(span.end()), message);
@@ -50,7 +59,7 @@ impl Expression {
             children
                 .next()
                 .ok_or_else(|| error("missing expression"))?
-                .lower()
+                .lower(depth + 1)
         };
         match self.0.kind() {
             K::IntegerExpr => {
@@ -69,24 +78,28 @@ impl Expression {
             }
             K::ListExpr => Ok(Expr::List(
                 children
-                    .map(|item| item.lower())
+                    .map(|item| item.lower(depth + 1))
                     .collect::<Result<_, _>>()?,
             )),
-            K::StringExpr => lower_string(&self.0),
+            K::StringExpr => lower_string(&self.0, depth),
             K::AttrSetExpr => Ok(Expr::AttrSet {
                 recursive: self
                     .0
                     .children_with_tokens()
                     .filter_map(|it| it.into_token())
                     .any(|token| token.kind() == K::Rec),
-                bindings: lower_bindings(&self.0)?,
+                bindings: lower_bindings(&self.0, depth)?,
             }),
             K::LetExpr => Ok(Expr::Let {
-                bindings: lower_bindings(&self.0)?,
+                bindings: lower_bindings(&self.0, depth)?,
                 body: Box::new(child()?),
             }),
             K::WithExpr => Ok(Expr::With {
                 scope: Box::new(child()?),
+                body: Box::new(child()?),
+            }),
+            K::AssertExpr => Ok(Expr::Assert {
+                condition: Box::new(child()?),
                 body: Box::new(child()?),
             }),
             K::IfExpr => Ok(Expr::If {
@@ -99,7 +112,7 @@ impl Expression {
                 path: lower_path(&self.0)?,
                 default: children
                     .next()
-                    .map(|expr| expr.lower().map(Box::new))
+                    .map(|expr| expr.lower(depth + 1).map(Box::new))
                     .transpose()?,
             }),
             K::NegateExpr => Ok(Expr::Negate(Box::new(child()?))),
@@ -110,7 +123,7 @@ impl Expression {
                     .find(|n| matches!(n.kind(), K::IdentPattern | K::AttrPattern))
                     .ok_or_else(|| error("missing lambda parameter"))?;
                 Ok(Expr::Lambda {
-                    parameter: lower_pattern(&parameter)?,
+                    parameter: lower_pattern(&parameter, depth)?,
                     body: Box::new(child()?),
                 })
             }
@@ -119,7 +132,7 @@ impl Expression {
                 for argument in children {
                     function = Expr::Apply {
                         function: Box::new(function),
-                        argument: Box::new(argument.lower()?),
+                        argument: Box::new(argument.lower(depth + 1)?),
                     };
                 }
                 Ok(function)
@@ -148,7 +161,7 @@ impl Expression {
     }
 }
 
-fn lower_bindings(node: &SyntaxNode) -> Result<Vec<Binding>, Diagnostic> {
+fn lower_bindings(node: &SyntaxNode, depth: usize) -> Result<Vec<Binding>, Diagnostic> {
     let range = node.text_range();
     let error = |message| {
         Diagnostic::new(
@@ -165,7 +178,7 @@ fn lower_bindings(node: &SyntaxNode) -> Result<Vec<Binding>, Diagnostic> {
                     .children()
                     .find_map(Expression::cast)
                     .ok_or_else(|| error("missing binding value"))?
-                    .lower()?,
+                    .lower(depth + 1)?,
             }),
             K::InheritBinding => Ok(Binding::Inherit {
                 source: binding
@@ -176,7 +189,7 @@ fn lower_bindings(node: &SyntaxNode) -> Result<Vec<Binding>, Diagnostic> {
                             .children()
                             .find_map(Expression::cast)
                             .ok_or_else(|| error("missing inheritance source"))?
-                            .lower()
+                            .lower(depth + 1)
                     })
                     .transpose()?,
                 names: binding
@@ -190,7 +203,7 @@ fn lower_bindings(node: &SyntaxNode) -> Result<Vec<Binding>, Diagnostic> {
         .collect()
 }
 
-fn lower_string(node: &SyntaxNode) -> Result<Expr, Diagnostic> {
+fn lower_string(node: &SyntaxNode, depth: usize) -> Result<Expr, Diagnostic> {
     let range = node.text_range();
     let error = |message| {
         Diagnostic::new(
@@ -207,7 +220,7 @@ fn lower_string(node: &SyntaxNode) -> Result<Expr, Diagnostic> {
                 part.children()
                     .find_map(Expression::cast)
                     .ok_or_else(|| error("missing interpolation expression"))?
-                    .lower()?,
+                    .lower(depth + 1)?,
             ),
             _ => return Err(error("cannot lower an erroneous string part")),
         });
@@ -233,7 +246,7 @@ fn lower_path(node: &SyntaxNode) -> Result<Vec<String>, Diagnostic> {
         .collect())
 }
 
-fn lower_pattern(node: &SyntaxNode) -> Result<Pattern, Diagnostic> {
+fn lower_pattern(node: &SyntaxNode, depth: usize) -> Result<Pattern, Diagnostic> {
     let name = |node: &SyntaxNode| {
         node.children_with_tokens()
             .filter_map(|it| it.into_token())
@@ -260,7 +273,7 @@ fn lower_pattern(node: &SyntaxNode) -> Result<Pattern, Diagnostic> {
                 default: child
                     .children()
                     .find_map(Expression::cast)
-                    .map(|expr| expr.lower())
+                    .map(|expr| expr.lower(depth + 1))
                     .transpose()?,
             }),
             K::PatternBind => bind = Some(name(&child)?),

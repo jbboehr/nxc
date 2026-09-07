@@ -20,8 +20,9 @@ support is provided by `.envrc` (`direnv allow`).
 The current subset implements identifiers, integers, parentheses, arithmetic,
 calls, and simple/attribute-pattern lambdas in both conversion directions.
 It also includes static attrsets, dotted bindings, inheritance, and selections
-with defaults, lists, `let`, `with`, and `if` expressions, double-quoted/indented
-strings, and interpolation. `nxc` provides `check`, `to-nix`, and `from-nix`.
+with defaults, lists, `let`, `with`, `if`, and `assert` expressions,
+double-quoted/indented strings, and interpolation. `nxc` provides `check`, `to-nix`,
+and `from-nix`.
 `xtask` provides the corpus runner described in
 [the handoff](docs/HANDOFF.md). All crates currently disable publishing.
 
@@ -47,7 +48,8 @@ round trips, CLI output and error handling, and resource limits. Proptest checks
 arbitrary UTF-8 input and generated semantic expressions. The native Nix oracle
 checks generated syntax, precedence, currying, parameter scope, lazy defaults,
 argument validation, recursive set merges, local binding and `with` scope, inheritance,
-lazy conditional branches, list boundaries/laziness, string coercion/context,
+lazy conditional branches, assertion failures and evaluation order,
+list boundaries/laziness, string coercion/context,
 and evaluation failures; it skips only when
 `nix-instantiate` is unavailable.
 Nix is provided in the dev
@@ -113,7 +115,7 @@ Discovery errors abort before processing because the file list is incomplete.
 
 Native parse counts include the library's compatibility and resource preflight
 checks. Lowering is counted separately, so valid unsupported forms such as
-paths and `assert` expressions are distinguishable from parse failures.
+paths and attribute-existence tests are distinguishable from parse failures.
 Coverage is expected to be low until those syntax forms are implemented. Small temporary
 corpora in the xtask tests exercise reporting and failure handling; no nixpkgs
 checkout is required by the test suite or vendored into this repository.
@@ -199,6 +201,18 @@ validation, including unused branches. Nxc AST lowering unwraps parentheses
 iteratively before recursive lowering so canonical output at the nesting limit
 fits the stack. Existing argument and binding recovery preserves enclosing items
 after a malformed conditional.
+
+`Expr::Assert` retains the condition and body without evaluating either. The nxc
+parser treats `assert(condition, body)` as an atom, using the existing argument
+parser and recovery with exactly two expressions and an optional trailing comma.
+Native lowering accepts `assert condition; body`; native emission parenthesizes
+the whole assertion to preserve expression boundaries. Both children pass shared
+semantic and resource validation even when a false condition prevents body
+evaluation. Boolean checks, assertion failures, and laziness remain Nix's job.
+Nxc lowering also checks recursion depth before constructing the IR, so bare
+conditional chains beyond the semantic limit return diagnostics without
+exhausting the stack. Parentheses do not consume that depth budget; shared IR
+validation still accounts for implicit nesting in calls and dotted bindings.
 
 Selections retain their full static path and optional lazy default. The parser
 uses Nix's simple-expression precedence for `or`; emitters parenthesize fallback

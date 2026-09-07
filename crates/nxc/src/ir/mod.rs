@@ -24,6 +24,11 @@ pub enum Expr {
         scope: Box<Expr>,
         body: Box<Expr>,
     },
+    /// Require a true Boolean condition before evaluating the body, as in Nix.
+    Assert {
+        condition: Box<Expr>,
+        body: Box<Expr>,
+    },
     /// Evaluate the condition, then only the selected branch, using Nix semantics.
     If {
         condition: Box<Expr>,
@@ -287,6 +292,9 @@ impl Expr {
                 Self::Negate(expr) => pending.push((expr, depth + 1)),
                 Self::With { scope, body } => {
                     pending.extend([(scope.as_ref(), depth + 1), (body.as_ref(), depth + 1)])
+                }
+                Self::Assert { condition, body } => {
+                    pending.extend([(condition.as_ref(), depth + 1), (body.as_ref(), depth + 1)])
                 }
                 Self::If {
                     condition,

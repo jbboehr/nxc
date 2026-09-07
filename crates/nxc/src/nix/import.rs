@@ -198,6 +198,10 @@ fn lower(mut node: ast::Expr, depth: usize) -> Result<Expr, Diagnostic> {
             scope: Box::new(child(with.namespace())?),
             body: Box::new(child(with.body())?),
         }),
+        ast::Expr::Assert(assertion) => Ok(Expr::Assert {
+            condition: Box::new(child(assertion.condition())?),
+            body: Box::new(child(assertion.body())?),
+        }),
         ast::Expr::IfElse(conditional) => Ok(Expr::If {
             condition: Box::new(child(conditional.condition())?),
             then_branch: Box::new(child(conditional.body())?),

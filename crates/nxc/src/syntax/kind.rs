@@ -71,6 +71,8 @@ pub enum SyntaxKind {
     Yield,
     #[token("with")]
     With,
+    #[token("assert")]
+    Assert,
     #[token("if")]
     If,
     #[token("then")]
@@ -96,6 +98,7 @@ pub enum SyntaxKind {
     AttrSetExpr,
     LetExpr,
     WithExpr,
+    AssertExpr,
     IfExpr,
     SelectExpr,
     StringExpr,
@@ -147,6 +150,7 @@ impl SyntaxKind {
                 | Self::AttrSetExpr
                 | Self::LetExpr
                 | Self::WithExpr
+                | Self::AssertExpr
                 | Self::IfExpr
                 | Self::SelectExpr
                 | Self::StringExpr
@@ -186,6 +190,7 @@ impl std::fmt::Display for SyntaxKind {
             Self::Let => "'let'",
             Self::Yield => "'yield'",
             Self::With => "'with'",
+            Self::Assert => "'assert'",
             Self::If => "'if'",
             Self::Then => "'then'",
             Self::Else => "'else'",
@@ -240,6 +245,7 @@ impl rowan::Language for NxcLanguage {
             Let,
             Yield,
             With,
+            Assert,
             If,
             Then,
             Else,
@@ -260,6 +266,7 @@ impl rowan::Language for NxcLanguage {
             AttrSetExpr,
             LetExpr,
             WithExpr,
+            AssertExpr,
             IfExpr,
             SelectExpr,
             StringExpr,

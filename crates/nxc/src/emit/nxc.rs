@@ -60,6 +60,9 @@ fn render(expr: &Expr) -> String {
             render(body)
         ),
         Expr::With { scope, body } => format!("with({}, {})", render(scope), render(body)),
+        Expr::Assert { condition, body } => {
+            format!("assert({}, {})", render(condition), render(body))
+        }
         Expr::If {
             condition,
             then_branch,

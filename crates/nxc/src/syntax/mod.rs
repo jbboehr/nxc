@@ -35,7 +35,7 @@ impl Parse {
             .syntax()
             .and_then(|root| root.children().find_map(ast::Expression::cast))
             .ok_or_else(|| vec![Diagnostic::new(0..0, "missing expression")])?;
-        let lowered = expr.lower().map_err(|e| vec![e])?;
+        let lowered = expr.lower(1).map_err(|e| vec![e])?;
         lowered.validate().map_err(|mut e| {
             let range = expr.syntax().text_range();
             e.span = usize::from(range.start())..usize::from(range.end());

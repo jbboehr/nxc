@@ -115,7 +115,7 @@ fn unsupported_native_forms_are_never_guessed() {
         "",
         "f (",
         "1.5",
-        "assert true; 1",
+        "a ? b",
         "./foo",
         "a // b",
         "a -> b",

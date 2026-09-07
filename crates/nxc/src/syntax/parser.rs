@@ -314,9 +314,26 @@ pub(super) fn parse(tokens: &[Token], source_len: usize) -> (Option<Node>, Vec<D
                 }
                 Ok(Node::new(K::WithExpr, span, children))
             });
+        let assert_expr =
+            just(K::Assert)
+                .ignore_then(arguments.clone())
+                .try_map(|children, span| {
+                    if children.len() != 2 {
+                        return Err(Rich::custom(span, "assert requires a condition and a body"));
+                    }
+                    Ok(Node::new(K::AssertExpr, span, children))
+                });
 
         let atom = choice((
-            integer, variable, paren, attrset, let_expr, with_expr, string, list,
+            integer,
+            variable,
+            paren,
+            attrset,
+            let_expr,
+            with_expr,
+            assert_expr,
+            string,
+            list,
         ))
         .boxed();
         // Native `or` takes a simple expression: a call/arithmetic/lambda in

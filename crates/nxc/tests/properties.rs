@@ -25,6 +25,10 @@ fn expressions() -> impl Strategy<Value = Expr> {
     ]
     .prop_recursive(5, 64, 3, |inner| {
         prop_oneof![
+            (inner.clone(), inner.clone()).prop_map(|(condition, body)| Expr::Assert {
+                condition: Box::new(condition),
+                body: Box::new(body),
+            }),
             (inner.clone(), inner.clone(), inner.clone()).prop_map(
                 |(condition, then_branch, else_branch)| Expr::If {
                     condition: Box::new(condition),

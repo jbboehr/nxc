@@ -10,8 +10,8 @@ A C/Rust-flavored concrete syntax for Nix with unchanged Nix evaluation semantic
 The current subset supports identifiers, integer literals, parentheses,
 arithmetic (`+`, `-`, `*`, `/`, and unary `-`), curried function calls, and lambdas
 with simple or attribute-pattern parameters. Static attrsets and attribute
-selections, lists, `let`, `with`, and `if` expressions, double-quoted and indented
-strings, and string interpolation are also supported.
+selections, lists, `let`, `with`, `if`, and `assert` expressions, double-quoted and
+indented strings, and string interpolation are also supported.
 
 For example, `f(1 + 2, x)` converts to native Nix equivalent to `f (1 + 2) x`.
 Conversion preserves the expression's structure and leaves evaluation to Nix.
@@ -120,6 +120,20 @@ an attribute, using it in arithmetic, or supplying a selection default:
 Conditionals can appear directly as nxc list elements and call arguments, as in
 `[if c then 1 else 2, 3]` and `f(if c then 1 else 2)`.
 
+Use `assert(condition, expression)` to require a condition before evaluating an
+expression:
+
+```nix
+assert(enabled, start(service))
+```
+
+This converts to native `assert enabled; start service`. Nix evaluates the body
+only if the condition is `true`; `false` raises an assertion failure, and a
+non-Boolean condition raises a type error. An unused assertion stays unevaluated.
+The form requires exactly two expressions, permits a trailing comma, and can
+appear directly in other expressions, such as `assert(enabled, { x = 1; }).x`.
+Conversion preserves both expressions without evaluating or type-checking them.
+
 Use `value.a.b` to select an attribute and `value.a or fallback` for a missing
 attribute. `or` keeps Nix's tight precedence: `s.f or fallback(x)` means
 `(s.f or fallback)(x)`, and `s.a or 2 + 3` means `(s.a or 2) + 3`. Parenthesize
@@ -188,9 +202,8 @@ Integer literals range from `0` to `9223372036854775807`; negative values use un
 Attribute paths have at most 128 components, and dotted bindings count toward
 semantic nesting. Generated output must fit these limits as well.
 
-Quoted/dynamic attributes, attribute-existence tests (`?`), paths, and `assert`
-are not implemented yet. The older native `let { body = ...; }`
-syntax is also unsupported.
+Quoted/dynamic attributes, attribute-existence tests (`?`), and paths are not
+implemented yet. The older native `let { body = ...; }` syntax is also unsupported.
 
 A complete conversion example:
 
