@@ -116,6 +116,7 @@ impl Expression {
                     .transpose()?,
             }),
             K::NegateExpr => Ok(Expr::Negate(Box::new(child()?))),
+            K::NotExpr => Ok(Expr::Not(Box::new(child()?))),
             K::LambdaExpr => {
                 let parameter = self
                     .0
@@ -147,9 +148,17 @@ impl Expression {
                         K::Minus => Some(BinaryOp::Subtract),
                         K::Star => Some(BinaryOp::Multiply),
                         K::Slash => Some(BinaryOp::Divide),
+                        K::EqualEqual => Some(BinaryOp::Equal),
+                        K::NotEqual => Some(BinaryOp::NotEqual),
+                        K::Less => Some(BinaryOp::Less),
+                        K::LessEqual => Some(BinaryOp::LessOrEqual),
+                        K::Greater => Some(BinaryOp::Greater),
+                        K::GreaterEqual => Some(BinaryOp::GreaterOrEqual),
+                        K::AndAnd => Some(BinaryOp::And),
+                        K::OrOr => Some(BinaryOp::Or),
                         _ => None,
                     })
-                    .ok_or_else(|| error("missing arithmetic operator"))?;
+                    .ok_or_else(|| error("missing binary operator"))?;
                 Ok(Expr::Binary {
                     op,
                     left: Box::new(child()?),

@@ -8,7 +8,7 @@ Lex Ferrata\
 A C/Rust-flavored concrete syntax for Nix with unchanged Nix evaluation semantics.
 
 The current subset supports identifiers, integer literals, parentheses,
-arithmetic (`+`, `-`, `*`, `/`, and unary `-`), curried function calls, and lambdas
+arithmetic, comparison and Boolean operators, curried function calls, and lambdas
 with simple or attribute-pattern parameters. Static attrsets and attribute
 selections, lists, `let`, `with`, `if`, and `assert` expressions, double-quoted and
 indented strings, and string interpolation are also supported.
@@ -33,10 +33,38 @@ Identifiers retain Nix's hyphens and apostrophes: `a-b` is one identifier, while
 not supported yet. Comments may use `//`, `#`, or `/* ... */`, and calls may have
 a trailing comma. Calls require at least one argument.
 
+Operators follow [Nix precedence](https://nix.dev/manual/nix/2.34/language/operators).
+Calls and selections bind more tightly than the following groups, listed from
+tightest to loosest:
+
+| Operators | Meaning |
+| --- | --- |
+| unary `-` | Arithmetic negation |
+| `*`, `/` | Multiplication, division |
+| `+`, `-` | Addition, subtraction |
+| `!` | Boolean negation |
+| `<`, `<=`, `>`, `>=` | Ordering comparisons |
+| `==`, `!=` | Equality, inequality |
+| `&&` | Boolean AND |
+| `||` | Boolean OR |
+
+Arithmetic and Boolean binary operators associate to the left. Comparisons in
+the same group require parentheses when nested: `a < b < c` and `a == b != c`
+are errors. Use `a < b && b < c` to combine two comparisons.
+`!a + b` means `!(a + b)`, while `!a == b` means `(!a) == b`.
+
+`&&` and `||` preserve Nix's short-circuit evaluation: `false && (1 / 0)` is
+`false`, and `true || (1 / 0)` is `true`. Conversion leaves operand type checks,
+collection comparisons, and evaluation failures to Nix. For example:
+
+```nix
+assert(enabled && count > 0, packages)
+```
+
 Lambdas use `=>`. The forms `x => x + 1`, `(x) => x + 1`, and
 `fn(x) => x + 1` all convert to native `x: x + 1`. Multiple arguments use nested
 lambdas: `(x => y => x + y)(1, 2)` evaluates to `3` in Nix. Parenthesize a
-lambda when calling it or using it as an arithmetic operand.
+lambda when calling it or using it as an operator operand.
 
 Attribute patterns keep Nix's lazy defaults (`?`), extra-attribute marker
 (`...`), and whole-argument capture (`@`):
@@ -158,7 +186,7 @@ while `[a, -b]` contains two elements. Likewise, `[f (x)]` contains one call;
 use `[f, (x)]` for two elements. Generated nxc always includes commas between
 elements. Conversion preserves element order, nesting, and lazy evaluation.
 Native Nix input keeps its own list rules, including parentheses around calls,
-arithmetic, lambdas, conditionals, `let ... in ...`, and `with ...; ...` used as
+operators, lambdas, conditionals, `let ... in ...`, and `with ...; ...` used as
 individual elements.
 
 Double-quoted strings use Nix's escapes and `${...}` interpolation. Expressions
@@ -204,6 +232,9 @@ semantic nesting. Generated output must fit these limits as well.
 
 Quoted/dynamic attributes, attribute-existence tests (`?`), and paths are not
 implemented yet. The older native `let { body = ...; }` syntax is also unsupported.
+List concatenation (`++`), implication (`->`), and attrset update remain
+unsupported. Native import currently requires parentheses around `!` expressions
+nested inside arithmetic, such as `-(!x)`.
 
 A complete conversion example:
 

@@ -49,6 +49,7 @@ pub enum Expr {
         argument: Box<Expr>,
     },
     Negate(Box<Expr>),
+    Not(Box<Expr>),
     Binary {
         op: BinaryOp,
         left: Box<Expr>,
@@ -112,6 +113,14 @@ pub enum BinaryOp {
     Subtract,
     Multiply,
     Divide,
+    Equal,
+    NotEqual,
+    Less,
+    LessOrEqual,
+    Greater,
+    GreaterOrEqual,
+    And,
+    Or,
 }
 
 impl BinaryOp {
@@ -121,6 +130,14 @@ impl BinaryOp {
             Self::Subtract => "-",
             Self::Multiply => "*",
             Self::Divide => "/",
+            Self::Equal => "==",
+            Self::NotEqual => "!=",
+            Self::Less => "<",
+            Self::LessOrEqual => "<=",
+            Self::Greater => ">",
+            Self::GreaterOrEqual => ">=",
+            Self::And => "&&",
+            Self::Or => "||",
         }
     }
 }
@@ -289,7 +306,7 @@ impl Expr {
                     }
                     pending.push((body, depth + 1));
                 }
-                Self::Negate(expr) => pending.push((expr, depth + 1)),
+                Self::Negate(expr) | Self::Not(expr) => pending.push((expr, depth + 1)),
                 Self::With { scope, body } => {
                     pending.extend([(scope.as_ref(), depth + 1), (body.as_ref(), depth + 1)])
                 }

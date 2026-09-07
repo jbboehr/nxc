@@ -87,6 +87,7 @@ fn render(expr: &Expr) -> String {
             format!("({parameter} => {})", render(body))
         }
         Expr::Negate(value) => format!("(-{})", render(value)),
+        Expr::Not(value) => format!("(!{})", render(value)),
         Expr::Binary { op, left, right } => {
             format!("({} {} {})", render(left), op.spelling(), render(right))
         }

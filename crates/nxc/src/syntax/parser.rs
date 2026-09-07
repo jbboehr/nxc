@@ -4,7 +4,7 @@ use super::{SyntaxKind as K, lexer::Token};
 use crate::Diagnostic;
 use chumsky::{
     input::Stream,
-    pratt::{infix, left, postfix, prefix},
+    pratt::{infix, left, none, postfix, prefix},
     prelude::*,
     recovery::{nested_delimiters, via_parser},
 };
@@ -269,27 +269,49 @@ pub(super) fn parse(tokens: &[Token], source_len: usize) -> (Option<Node>, Vec<D
             });
 
         // Skip nested groups as a unit, stopping at the outer separator.
-        let item = expr.clone().recover_with(via_parser(
-            nested
-                .or(none_of([
-                    K::LParen,
-                    K::LBracket,
-                    K::RBracket,
-                    K::LBrace,
-                    K::StringStart,
-                    K::InterpolationStart,
-                    K::Comma,
-                    K::RParen,
-                    K::RBrace,
-                    K::StringEnd,
-                    K::InterpolationEnd,
+        // Pratt parsing can stop before an operator whose right operand fails.
+        // Treat that partial result as an error here so recovery consumes the
+        // malformed item and preserves expressions after its separator.
+        let item = expr
+            .clone()
+            .then_ignore(
+                one_of([
+                    K::Plus,
+                    K::Minus,
+                    K::Star,
+                    K::Slash,
+                    K::EqualEqual,
+                    K::NotEqual,
+                    K::Less,
+                    K::LessEqual,
+                    K::Greater,
+                    K::GreaterEqual,
+                    K::AndAnd,
+                    K::OrOr,
                 ])
-                .ignored())
-                .repeated()
-                .at_least(1)
-                .ignored()
-                .map_with(|_, e| Node::new(K::ErrorExpr, e.span(), vec![])),
-        ));
+                .not(),
+            )
+            .recover_with(via_parser(
+                nested
+                    .or(none_of([
+                        K::LParen,
+                        K::LBracket,
+                        K::RBracket,
+                        K::LBrace,
+                        K::StringStart,
+                        K::InterpolationStart,
+                        K::Comma,
+                        K::RParen,
+                        K::RBrace,
+                        K::StringEnd,
+                        K::InterpolationEnd,
+                    ])
+                    .ignored())
+                    .repeated()
+                    .at_least(1)
+                    .ignored()
+                    .map_with(|_, e| Node::new(K::ErrorExpr, e.span(), vec![])),
+            ));
         // Parse each complete expression once. Missing commas do not cause
         // backtracking into it to invent a shorter element boundary.
         let list = item
@@ -359,14 +381,14 @@ pub(super) fn parse(tokens: &[Token], source_len: usize) -> (Option<Node>, Vec<D
         let selection = just(K::Dot)
             .ignore_then(path)
             .then(just(K::Or).ignore_then(simple).or_not());
-        let arithmetic = atom.pratt((
-            postfix(4, arguments, |function, arguments: Vec<Node>, e| {
+        let operators = atom.pratt((
+            postfix(9, arguments, |function, arguments: Vec<Node>, e| {
                 let mut children = vec![function];
                 children.extend(arguments);
                 Node::new(K::CallExpr, e.span(), children)
             }),
             postfix(
-                4,
+                9,
                 selection,
                 |value, (path, default): (Node, Option<Node>), e| {
                     let mut children = vec![value, path];
@@ -374,13 +396,33 @@ pub(super) fn parse(tokens: &[Token], source_len: usize) -> (Option<Node>, Vec<D
                     Node::new(K::SelectExpr, e.span(), children)
                 },
             ),
-            prefix(3, just(K::Minus), |_, operand, e| {
+            prefix(8, just(K::Minus), |_, operand, e| {
                 Node::new(K::NegateExpr, e.span(), vec![operand])
             }),
-            infix(left(2), one_of([K::Star, K::Slash]), |lhs, _, rhs, e| {
+            infix(left(7), one_of([K::Star, K::Slash]), |lhs, _, rhs, e| {
                 Node::new(K::BinaryExpr, e.span(), vec![lhs, rhs])
             }),
-            infix(left(1), one_of([K::Plus, K::Minus]), |lhs, _, rhs, e| {
+            infix(left(6), one_of([K::Plus, K::Minus]), |lhs, _, rhs, e| {
+                Node::new(K::BinaryExpr, e.span(), vec![lhs, rhs])
+            }),
+            // Nix's Boolean negation binds below arithmetic, above comparisons.
+            prefix(5, just(K::Bang), |_, operand, e| {
+                Node::new(K::NotExpr, e.span(), vec![operand])
+            }),
+            infix(
+                none(4),
+                one_of([K::Less, K::LessEqual, K::Greater, K::GreaterEqual]),
+                |lhs, _, rhs, e| Node::new(K::BinaryExpr, e.span(), vec![lhs, rhs]),
+            ),
+            infix(
+                none(3),
+                one_of([K::EqualEqual, K::NotEqual]),
+                |lhs, _, rhs, e| Node::new(K::BinaryExpr, e.span(), vec![lhs, rhs]),
+            ),
+            infix(left(2), just(K::AndAnd), |lhs, _, rhs, e| {
+                Node::new(K::BinaryExpr, e.span(), vec![lhs, rhs])
+            }),
+            infix(left(1), just(K::OrOr), |lhs, _, rhs, e| {
                 Node::new(K::BinaryExpr, e.span(), vec![lhs, rhs])
             }),
         ));
@@ -398,8 +440,8 @@ pub(super) fn parse(tokens: &[Token], source_len: usize) -> (Option<Node>, Vec<D
                 )
             });
         // Lambdas and conditionals extend to the right over the whole body or
-        // final branch. As arithmetic operands or callees they need parentheses.
-        choice((conditional, lambda, arithmetic))
+        // final branch. As operator operands or callees they need parentheses.
+        choice((conditional, lambda, operators))
     });
 
     let (node, errors) = expr.parse(input).into_output_errors();

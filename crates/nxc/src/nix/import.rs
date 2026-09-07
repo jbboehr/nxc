@@ -161,6 +161,14 @@ fn lower(mut node: ast::Expr, depth: usize) -> Result<Expr, Diagnostic> {
             depth + 1,
         )
     };
+    let operator_child = |node: Option<ast::Expr>| {
+        // rnix accepts bare lambdas as operator operands, while Nix requires
+        // parentheses. Check before lowering removes the AST wrapper.
+        if matches!(node, Some(ast::Expr::Lambda(_))) {
+            return Err(error("native lambda operator operands require parentheses"));
+        }
+        child(node)
+    };
     match node {
         ast::Expr::Ident(ident) => {
             let name = syntax(&ident).text().to_string();
@@ -263,7 +271,10 @@ fn lower(mut node: ast::Expr, depth: usize) -> Result<Expr, Diagnostic> {
             })
         }
         ast::Expr::UnaryOp(unary) if unary.operator() == Some(ast::UnaryOpKind::Negate) => {
-            Ok(Expr::Negate(Box::new(child(unary.expr())?)))
+            Ok(Expr::Negate(Box::new(operator_child(unary.expr())?)))
+        }
+        ast::Expr::UnaryOp(unary) if unary.operator() == Some(ast::UnaryOpKind::Invert) => {
+            Ok(Expr::Not(Box::new(operator_child(unary.expr())?)))
         }
         ast::Expr::BinOp(binary) => {
             let op = match binary.operator() {
@@ -271,12 +282,20 @@ fn lower(mut node: ast::Expr, depth: usize) -> Result<Expr, Diagnostic> {
                 Some(ast::BinOpKind::Sub) => BinaryOp::Subtract,
                 Some(ast::BinOpKind::Mul) => BinaryOp::Multiply,
                 Some(ast::BinOpKind::Div) => BinaryOp::Divide,
+                Some(ast::BinOpKind::Equal) => BinaryOp::Equal,
+                Some(ast::BinOpKind::NotEqual) => BinaryOp::NotEqual,
+                Some(ast::BinOpKind::Less) => BinaryOp::Less,
+                Some(ast::BinOpKind::LessOrEq) => BinaryOp::LessOrEqual,
+                Some(ast::BinOpKind::More) => BinaryOp::Greater,
+                Some(ast::BinOpKind::MoreOrEq) => BinaryOp::GreaterOrEqual,
+                Some(ast::BinOpKind::And) => BinaryOp::And,
+                Some(ast::BinOpKind::Or) => BinaryOp::Or,
                 _ => return Err(error("native Nix operator is not supported yet")),
             };
             Ok(Expr::Binary {
                 op,
-                left: Box::new(child(binary.lhs())?),
-                right: Box::new(child(binary.rhs())?),
+                left: Box::new(operator_child(binary.lhs())?),
+                right: Box::new(operator_child(binary.rhs())?),
             })
         }
         other => Err(error(&format!(

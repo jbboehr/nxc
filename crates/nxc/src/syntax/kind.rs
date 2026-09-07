@@ -39,6 +39,24 @@ pub enum SyntaxKind {
     Star,
     #[token("/")]
     Slash,
+    #[token("!")]
+    Bang,
+    #[token("==")]
+    EqualEqual,
+    #[token("!=")]
+    NotEqual,
+    #[token("<")]
+    Less,
+    #[token("<=")]
+    LessEqual,
+    #[token(">")]
+    Greater,
+    #[token(">=")]
+    GreaterEqual,
+    #[token("&&")]
+    AndAnd,
+    #[token("||")]
+    OrOr,
     #[token("fn")]
     Fn,
     #[token("=>")]
@@ -93,6 +111,7 @@ pub enum SyntaxKind {
     ParenExpr,
     CallExpr,
     NegateExpr,
+    NotExpr,
     BinaryExpr,
     LambdaExpr,
     AttrSetExpr,
@@ -145,6 +164,7 @@ impl SyntaxKind {
                 | Self::ParenExpr
                 | Self::CallExpr
                 | Self::NegateExpr
+                | Self::NotExpr
                 | Self::BinaryExpr
                 | Self::LambdaExpr
                 | Self::AttrSetExpr
@@ -174,6 +194,15 @@ impl std::fmt::Display for SyntaxKind {
             Self::Minus => "'-'",
             Self::Star => "'*'",
             Self::Slash => "'/'",
+            Self::Bang => "'!'",
+            Self::EqualEqual => "'=='",
+            Self::NotEqual => "'!='",
+            Self::Less => "'<'",
+            Self::LessEqual => "'<='",
+            Self::Greater => "'>'",
+            Self::GreaterEqual => "'>='",
+            Self::AndAnd => "'&&'",
+            Self::OrOr => "'||'",
             Self::Fn => "'fn'",
             Self::Arrow => "'=>'",
             Self::LBrace => "'{'",
@@ -229,6 +258,15 @@ impl rowan::Language for NxcLanguage {
             Minus,
             Star,
             Slash,
+            Bang,
+            EqualEqual,
+            NotEqual,
+            Less,
+            LessEqual,
+            Greater,
+            GreaterEqual,
+            AndAnd,
+            OrOr,
             Fn,
             Arrow,
             LBrace,
@@ -261,6 +299,7 @@ impl rowan::Language for NxcLanguage {
             ParenExpr,
             CallExpr,
             NegateExpr,
+            NotExpr,
             BinaryExpr,
             LambdaExpr,
             AttrSetExpr,

@@ -18,7 +18,8 @@ support is provided by `.envrc` (`direnv allow`).
 - `xtask`: development tasks, with a `cargo xtask` alias.
 
 The current subset implements identifiers, integers, parentheses, arithmetic,
-calls, and simple/attribute-pattern lambdas in both conversion directions.
+comparison and Boolean operators, calls, and simple/attribute-pattern lambdas in
+both conversion directions.
 It also includes static attrsets, dotted bindings, inheritance, and selections
 with defaults, lists, `let`, `with`, `if`, and `assert` expressions,
 double-quoted/indented strings, and interpolation. `nxc` provides `check`, `to-nix`,
@@ -47,6 +48,7 @@ Tests cover source reconstruction, malformed input, argument recovery, semantic
 round trips, CLI output and error handling, and resource limits. Proptest checks
 arbitrary UTF-8 input and generated semantic expressions. The native Nix oracle
 checks generated syntax, precedence, currying, parameter scope, lazy defaults,
+short-circuit Boolean operators, comparison values and lazy collection equality,
 argument validation, recursive set merges, local binding and `with` scope, inheritance,
 lazy conditional branches, assertion failures and evaluation order,
 list boundaries/laziness, string coercion/context,
@@ -137,6 +139,11 @@ own lexical rules.
 `syntax/parser.rs` uses Chumsky Pratt parsing to construct a temporary expression
 tree. `syntax/cst.rs` fills its spans with the original tokens to build an owned
 Rowan CST; `syntax/ast.rs` provides the typed expression view used for lowering.
+Pratt binding powers preserve Nix's ordering: Boolean negation is weaker than
+arithmetic and stronger than comparisons. Ordering and equality each use
+Chumsky's non-associative operator groups. A dangling binary operator makes an
+argument/list item fail before recovery, so a partial Pratt result cannot hide
+later items after a malformed operand.
 Recovery stops at call-argument/list commas or binding semicolons, skipping nested
 delimiter groups. Inside a `let` block it also stops before `yield`, preserving
 the result after a malformed binding. Any diagnostic blocks lowering.
@@ -151,6 +158,14 @@ unary and parentheses and source metadata do not participate in equality.
 `canonical()` is an identity view for this subset: no constant folding or other
 evaluation takes place. In particular, `true`, `false`, and `null` remain variable
 references, preserving Nix shadowing behavior.
+
+`Expr::Not` and the comparison/Boolean `BinaryOp` variants retain operand order
+without folding, type checking, or rewriting operators into function calls.
+Both emitters parenthesize operations. Native import rejects bare lambda
+operator operands before removing parentheses; rnix accepts those operands
+although Nix rejects them. Conversely, rnix rejects some valid native prefix
+combinations such as `1 + !true` and `-!true`. These remain explicit parse errors;
+parenthesized operands import normally, and generated output always groups them.
 
 Lambda IR retains the single parameter, required fields, unevaluated defaults,
 ellipsis, and optional whole-argument binding. Parameter spellings (`fn`,

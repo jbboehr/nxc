@@ -98,6 +98,7 @@ fn expressions() -> impl Strategy<Value = Expr> {
                 }
             ),
             inner.clone().prop_map(|e| Expr::Negate(Box::new(e))),
+            inner.clone().prop_map(|e| Expr::Not(Box::new(e))),
             (inner.clone(), inner.clone()).prop_map(|(f, a)| Expr::Apply {
                 function: Box::new(f),
                 argument: Box::new(a)
@@ -107,7 +108,15 @@ fn expressions() -> impl Strategy<Value = Expr> {
                     BinaryOp::Add,
                     BinaryOp::Subtract,
                     BinaryOp::Multiply,
-                    BinaryOp::Divide
+                    BinaryOp::Divide,
+                    BinaryOp::Equal,
+                    BinaryOp::NotEqual,
+                    BinaryOp::Less,
+                    BinaryOp::LessOrEqual,
+                    BinaryOp::Greater,
+                    BinaryOp::GreaterOrEqual,
+                    BinaryOp::And,
+                    BinaryOp::Or,
                 ]),
                 inner.clone(),
                 inner
