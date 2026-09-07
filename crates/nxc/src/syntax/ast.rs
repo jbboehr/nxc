@@ -26,6 +26,22 @@ impl AstNode for Expression {
 
 impl Expression {
     pub(super) fn lower(&self) -> Result<Expr, Diagnostic> {
+        // Generated output parenthesizes semantic operations. These wrappers
+        // must not add a full recursive lowering frame at each nesting level.
+        let mut expr = self.clone();
+        while expr.0.kind() == K::ParenExpr {
+            expr = expr.0.children().find_map(Self::cast).ok_or_else(|| {
+                let span = expr.0.text_range();
+                Diagnostic::new(
+                    usize::from(span.start())..usize::from(span.end()),
+                    "missing parenthesized expression",
+                )
+            })?;
+        }
+        expr.lower_unparenthesized()
+    }
+
+    fn lower_unparenthesized(&self) -> Result<Expr, Diagnostic> {
         let span = self.0.text_range();
         let error =
             |message| Diagnostic::new(usize::from(span.start())..usize::from(span.end()), message);
@@ -73,6 +89,11 @@ impl Expression {
                 scope: Box::new(child()?),
                 body: Box::new(child()?),
             }),
+            K::IfExpr => Ok(Expr::If {
+                condition: Box::new(child()?),
+                then_branch: Box::new(child()?),
+                else_branch: Box::new(child()?),
+            }),
             K::SelectExpr => Ok(Expr::Select {
                 value: Box::new(child()?),
                 path: lower_path(&self.0)?,
@@ -81,7 +102,6 @@ impl Expression {
                     .map(|expr| expr.lower().map(Box::new))
                     .transpose()?,
             }),
-            K::ParenExpr => child(),
             K::NegateExpr => Ok(Expr::Negate(Box::new(child()?))),
             K::LambdaExpr => {
                 let parameter = self

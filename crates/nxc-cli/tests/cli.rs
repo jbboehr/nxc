@@ -87,7 +87,7 @@ fn errors_do_not_produce_output_or_truncate_existing_files() {
         assert!(error.contains("broken.nxc:2:6"), "{error}");
         assert_eq!(fs::read_to_string(&output).unwrap(), "keep me");
     }
-    fs::write(&input, "if true then 1 else 2").unwrap();
+    fs::write(&input, "assert true; 1").unwrap();
     let failed = cli(&[
         "from-nix".as_ref(),
         input.as_os_str(),

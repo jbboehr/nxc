@@ -367,9 +367,22 @@ pub(super) fn parse(tokens: &[Token], source_len: usize) -> (Option<Node>, Vec<D
                 Node::new(K::BinaryExpr, e.span(), vec![lhs, rhs])
             }),
         ));
-        // A lambda extends to the right over the entire body. It is only an
-        // arithmetic operand or callee when explicitly parenthesized.
-        lambda.or(arithmetic)
+        let conditional = just(K::If)
+            .ignore_then(expr.clone())
+            .then_ignore(just(K::Then))
+            .then(expr.clone())
+            .then_ignore(just(K::Else))
+            .then(expr)
+            .map_with(|((condition, then_branch), else_branch), e| {
+                Node::new(
+                    K::IfExpr,
+                    e.span(),
+                    vec![condition, then_branch, else_branch],
+                )
+            });
+        // Lambdas and conditionals extend to the right over the whole body or
+        // final branch. As arithmetic operands or callees they need parentheses.
+        choice((conditional, lambda, arithmetic))
     });
 
     let (node, errors) = expr.parse(input).into_output_errors();

@@ -23,8 +23,15 @@ fn expressions() -> impl Strategy<Value = Expr> {
         prop::sample::select(vec!["f", "x", "g", "foo-bar'", "true", "false", "null"])
             .prop_map(|name| Expr::Variable(name.into())),
     ]
-    .prop_recursive(5, 64, 2, |inner| {
+    .prop_recursive(5, 64, 3, |inner| {
         prop_oneof![
+            (inner.clone(), inner.clone(), inner.clone()).prop_map(
+                |(condition, then_branch, else_branch)| Expr::If {
+                    condition: Box::new(condition),
+                    then_branch: Box::new(then_branch),
+                    else_branch: Box::new(else_branch),
+                }
+            ),
             (inner.clone(), inner.clone()).prop_map(|(scope, body)| Expr::With {
                 scope: Box::new(scope),
                 body: Box::new(body),

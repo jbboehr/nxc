@@ -60,6 +60,16 @@ fn render(expr: &Expr) -> String {
             render(body)
         ),
         Expr::With { scope, body } => format!("with({}, {})", render(scope), render(body)),
+        Expr::If {
+            condition,
+            then_branch,
+            else_branch,
+        } => format!(
+            "(if {} then {} else {})",
+            render(condition),
+            render(then_branch),
+            render(else_branch)
+        ),
         Expr::Select {
             value,
             path,

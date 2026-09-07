@@ -10,8 +10,8 @@ A C/Rust-flavored concrete syntax for Nix with unchanged Nix evaluation semantic
 The current subset supports identifiers, integer literals, parentheses,
 arithmetic (`+`, `-`, `*`, `/`, and unary `-`), curried function calls, and lambdas
 with simple or attribute-pattern parameters. Static attrsets and attribute
-selections, lists, `let` and `with` expressions, double-quoted and indented strings, and
-string interpolation are also supported.
+selections, lists, `let`, `with`, and `if` expressions, double-quoted and indented
+strings, and string interpolation are also supported.
 
 For example, `f(1 + 2, x)` converts to native Nix equivalent to `f (1 + 2) x`.
 Conversion preserves the expression's structure and leaves evaluation to Nix.
@@ -101,6 +101,25 @@ prefer the inner context. An unused context remains unevaluated. The form
 requires exactly two expressions and permits a trailing comma. It can appear
 directly in other expressions, such as `[with(pkgs, git), with(pkgs, ripgrep)]`.
 
+Conditionals keep native Nix syntax:
+
+```nix
+if enabled then start(service) else fallback
+if (enabled) then 1 else 2
+```
+
+Both branches are required. Nix evaluates the condition as a Boolean and then
+evaluates only the selected branch; for example, `if true then 1 else 1 / 0`
+evaluates to `1`. Conversion retains all three expressions and performs no
+evaluation or type checking.
+
+The final branch extends to the right: `if c then a else b + 1` adds only in the
+`else` branch. Parenthesize the whole conditional when calling its result, selecting
+an attribute, using it in arithmetic, or supplying a selection default:
+`(if c then f else g)(x)` or `s.a or (if c then 1 else 2)`.
+Conditionals can appear directly as nxc list elements and call arguments, as in
+`[if c then 1 else 2, 3]` and `f(if c then 1 else 2)`.
+
 Use `value.a.b` to select an attribute and `value.a or fallback` for a missing
 attribute. `or` keeps Nix's tight precedence: `s.f or fallback(x)` means
 `(s.f or fallback)(x)`, and `s.a or 2 + 3` means `(s.a or 2) + 3`. Parenthesize
@@ -125,7 +144,8 @@ while `[a, -b]` contains two elements. Likewise, `[f (x)]` contains one call;
 use `[f, (x)]` for two elements. Generated nxc always includes commas between
 elements. Conversion preserves element order, nesting, and lazy evaluation.
 Native Nix input keeps its own list rules, including parentheses around calls,
-arithmetic, lambdas, `let ... in ...`, and `with ...; ...` used as individual elements.
+arithmetic, lambdas, conditionals, `let ... in ...`, and `with ...; ...` used as
+individual elements.
 
 Double-quoted strings use Nix's escapes and `${...}` interpolation. Expressions
 inside interpolations use nxc syntax, including explicit function calls:
@@ -168,8 +188,8 @@ Integer literals range from `0` to `9223372036854775807`; negative values use un
 Attribute paths have at most 128 components, and dotted bindings count toward
 semantic nesting. Generated output must fit these limits as well.
 
-Quoted/dynamic attributes, attribute-existence tests (`?`), paths, `if`,
-and `assert` are not implemented yet. The older native `let { body = ...; }`
+Quoted/dynamic attributes, attribute-existence tests (`?`), paths, and `assert`
+are not implemented yet. The older native `let { body = ...; }`
 syntax is also unsupported.
 
 A complete conversion example:

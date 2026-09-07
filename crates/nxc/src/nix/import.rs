@@ -198,6 +198,11 @@ fn lower(mut node: ast::Expr, depth: usize) -> Result<Expr, Diagnostic> {
             scope: Box::new(child(with.namespace())?),
             body: Box::new(child(with.body())?),
         }),
+        ast::Expr::IfElse(conditional) => Ok(Expr::If {
+            condition: Box::new(child(conditional.condition())?),
+            then_branch: Box::new(child(conditional.body())?),
+            else_branch: Box::new(child(conditional.else_body())?),
+        }),
         ast::Expr::Select(select) => Ok(Expr::Select {
             value: Box::new(child(select.expr())?),
             path: lower_path(select.attrpath())?,

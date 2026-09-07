@@ -24,6 +24,12 @@ pub enum Expr {
         scope: Box<Expr>,
         body: Box<Expr>,
     },
+    /// Evaluate the condition, then only the selected branch, using Nix semantics.
+    If {
+        condition: Box<Expr>,
+        then_branch: Box<Expr>,
+        else_branch: Box<Expr>,
+    },
     Select {
         value: Box<Expr>,
         path: Vec<String>,
@@ -282,6 +288,15 @@ impl Expr {
                 Self::With { scope, body } => {
                     pending.extend([(scope.as_ref(), depth + 1), (body.as_ref(), depth + 1)])
                 }
+                Self::If {
+                    condition,
+                    then_branch,
+                    else_branch,
+                } => pending.extend([
+                    (condition.as_ref(), depth + 1),
+                    (then_branch.as_ref(), depth + 1),
+                    (else_branch.as_ref(), depth + 1),
+                ]),
                 Self::Apply { function, argument } => pending.extend([
                     (function.as_ref(), depth + 1),
                     (argument.as_ref(), depth + 1),

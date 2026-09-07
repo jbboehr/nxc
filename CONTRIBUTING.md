@@ -20,8 +20,8 @@ support is provided by `.envrc` (`direnv allow`).
 The current subset implements identifiers, integers, parentheses, arithmetic,
 calls, and simple/attribute-pattern lambdas in both conversion directions.
 It also includes static attrsets, dotted bindings, inheritance, and selections
-with defaults, lists, `let` and `with` expressions, double-quoted/indented strings, and
-interpolation. `nxc` provides `check`, `to-nix`, and `from-nix`.
+with defaults, lists, `let`, `with`, and `if` expressions, double-quoted/indented
+strings, and interpolation. `nxc` provides `check`, `to-nix`, and `from-nix`.
 `xtask` provides the corpus runner described in
 [the handoff](docs/HANDOFF.md). All crates currently disable publishing.
 
@@ -47,7 +47,8 @@ round trips, CLI output and error handling, and resource limits. Proptest checks
 arbitrary UTF-8 input and generated semantic expressions. The native Nix oracle
 checks generated syntax, precedence, currying, parameter scope, lazy defaults,
 argument validation, recursive set merges, local binding and `with` scope, inheritance,
-list boundaries/laziness, string coercion/context, and evaluation failures; it skips only when
+lazy conditional branches, list boundaries/laziness, string coercion/context,
+and evaluation failures; it skips only when
 `nix-instantiate` is unavailable.
 Nix is provided in the dev
 shell and package checks. The oracle uses Nix's dummy store so it can run inside
@@ -112,7 +113,7 @@ Discovery errors abort before processing because the file list is incomplete.
 
 Native parse counts include the library's compatibility and resource preflight
 checks. Lowering is counted separately, so valid unsupported forms such as
-paths and `if` expressions are distinguishable from parse failures.
+paths and `assert` expressions are distinguishable from parse failures.
 Coverage is expected to be low until those syntax forms are implemented. Small temporary
 corpora in the xtask tests exercise reporting and failure handling; no nixpkgs
 checkout is required by the test suite or vendored into this repository.
@@ -187,6 +188,17 @@ Conversion performs no scope resolution: lexical bindings keep priority over
 `with` attributes, nested contexts retain their lookup order, and unused contexts
 stay lazy. Native AST parentheses are unwrapped iteratively so generated output
 at the supported nesting limit does not add recursive lowering frames.
+
+`Expr::If` retains the condition and both branches without choosing a branch or
+requiring the condition to be a literal Boolean. Nix performs that type check at
+evaluation time. The grammar accepts `if condition then a else b` as a full
+expression; its final branch extends to the right, and recursive parsing pairs
+nested `then`/`else` keywords. Both emitters parenthesize the whole conditional to
+preserve expression boundaries. Every child passes shared semantic and resource
+validation, including unused branches. Nxc AST lowering unwraps parentheses
+iteratively before recursive lowering so canonical output at the nesting limit
+fits the stack. Existing argument and binding recovery preserves enclosing items
+after a malformed conditional.
 
 Selections retain their full static path and optional lazy default. The parser
 uses Nix's simple-expression precedence for `or`; emitters parenthesize fallback
