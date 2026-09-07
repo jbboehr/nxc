@@ -328,7 +328,12 @@ fn interpolation_retains_nix_string_context() {
     if !nix_available() {
         return;
     }
-    for source in [r#""a${x}b""#, "''a${x}b''", "''\n  a${x}b''"] {
+    for source in [
+        r#""a${x}b""#,
+        "''a${x}b''",
+        "''\n  a${x}b''",
+        r#"with { y = x; }; "a${y}b""#,
+    ] {
         let converted = nxc::emit::nxc(&nix::import(source).unwrap()).unwrap();
         let generated = nix::emit(&parse_nxc(&converted).unwrap()).unwrap();
         for value in [source, generated.as_str()] {

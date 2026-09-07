@@ -69,6 +69,8 @@ pub enum SyntaxKind {
     Let,
     #[token("yield")]
     Yield,
+    #[token("with")]
+    With,
     #[token("\"")]
     #[token("''")]
     StringStart,
@@ -87,6 +89,7 @@ pub enum SyntaxKind {
     LambdaExpr,
     AttrSetExpr,
     LetExpr,
+    WithExpr,
     SelectExpr,
     StringExpr,
     ListExpr,
@@ -136,6 +139,7 @@ impl SyntaxKind {
                 | Self::LambdaExpr
                 | Self::AttrSetExpr
                 | Self::LetExpr
+                | Self::WithExpr
                 | Self::SelectExpr
                 | Self::StringExpr
                 | Self::ListExpr
@@ -173,6 +177,7 @@ impl std::fmt::Display for SyntaxKind {
             Self::Or => "'or'",
             Self::Let => "'let'",
             Self::Yield => "'yield'",
+            Self::With => "'with'",
             Self::StringStart => "opening quote",
             Self::StringContent => "string text",
             Self::StringEnd => "closing quote",
@@ -223,6 +228,7 @@ impl rowan::Language for NxcLanguage {
             Or,
             Let,
             Yield,
+            With,
             StringStart,
             StringContent,
             StringEnd,
@@ -239,6 +245,7 @@ impl rowan::Language for NxcLanguage {
             LambdaExpr,
             AttrSetExpr,
             LetExpr,
+            WithExpr,
             SelectExpr,
             StringExpr,
             ListExpr,

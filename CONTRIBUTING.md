@@ -20,7 +20,7 @@ support is provided by `.envrc` (`direnv allow`).
 The current subset implements identifiers, integers, parentheses, arithmetic,
 calls, and simple/attribute-pattern lambdas in both conversion directions.
 It also includes static attrsets, dotted bindings, inheritance, and selections
-with defaults, lists, `let` expressions, double-quoted/indented strings, and
+with defaults, lists, `let` and `with` expressions, double-quoted/indented strings, and
 interpolation. `nxc` provides `check`, `to-nix`, and `from-nix`.
 `xtask` provides the corpus runner described in
 [the handoff](docs/HANDOFF.md). All crates currently disable publishing.
@@ -46,7 +46,7 @@ Tests cover source reconstruction, malformed input, argument recovery, semantic
 round trips, CLI output and error handling, and resource limits. Proptest checks
 arbitrary UTF-8 input and generated semantic expressions. The native Nix oracle
 checks generated syntax, precedence, currying, parameter scope, lazy defaults,
-argument validation, recursive set merges, local binding scope, inheritance,
+argument validation, recursive set merges, local binding and `with` scope, inheritance,
 list boundaries/laziness, string coercion/context, and evaluation failures; it skips only when
 `nix-instantiate` is unavailable.
 Nix is provided in the dev
@@ -112,7 +112,7 @@ Discovery errors abort before processing because the file list is incomplete.
 
 Native parse counts include the library's compatibility and resource preflight
 checks. Lowering is counted separately, so valid unsupported forms such as
-paths and `with` expressions are distinguishable from parse failures.
+paths and `if` expressions are distinguishable from parse failures.
 Coverage is expected to be low until those syntax forms are implemented. Small temporary
 corpora in the xtask tests exercise reporting and failure handling; no nixpkgs
 checkout is required by the test suite or vendored into this repository.
@@ -177,6 +177,16 @@ Exactly one final `yield` is required. `yield` stays valid as an attribute name
 outside that result marker. Native lowering accepts `let ... in ...` and rejects
 the legacy `let { body = ...; }` form. Native emission parenthesizes let-expressions
 to preserve boundaries in lists, selection defaults, calls, and arithmetic.
+
+`Expr::With` retains separate, unevaluated scope and body expressions. The nxc
+parser reuses call-argument parsing and recovery, requiring exactly two expressions
+inside `with(...)`, with an optional trailing comma. The delimited form is an
+atom. Native lowering preserves `with scope; body`, and emission parenthesizes
+the whole expression. Both children pass shared semantic and resource validation.
+Conversion performs no scope resolution: lexical bindings keep priority over
+`with` attributes, nested contexts retain their lookup order, and unused contexts
+stay lazy. Native AST parentheses are unwrapped iteratively so generated output
+at the supported nesting limit does not add recursive lowering frames.
 
 Selections retain their full static path and optional lazy default. The parser
 uses Nix's simple-expression precedence for `or`; emitters parenthesize fallback

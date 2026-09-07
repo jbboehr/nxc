@@ -19,6 +19,11 @@ pub enum Expr {
         bindings: Vec<Binding>,
         body: Box<Expr>,
     },
+    /// Expose the scope's attributes to the body using Nix's with semantics.
+    With {
+        scope: Box<Expr>,
+        body: Box<Expr>,
+    },
     Select {
         value: Box<Expr>,
         path: Vec<String>,
@@ -274,6 +279,9 @@ impl Expr {
                     pending.push((body, depth + 1));
                 }
                 Self::Negate(expr) => pending.push((expr, depth + 1)),
+                Self::With { scope, body } => {
+                    pending.extend([(scope.as_ref(), depth + 1), (body.as_ref(), depth + 1)])
+                }
                 Self::Apply { function, argument } => pending.extend([
                     (function.as_ref(), depth + 1),
                     (argument.as_ref(), depth + 1),

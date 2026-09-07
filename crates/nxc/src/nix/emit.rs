@@ -29,6 +29,7 @@ fn render(expr: &Expr) -> String {
             crate::emit::bindings(bindings, render),
             render(body)
         ),
+        Expr::With { scope, body } => format!("(with {}; {})", render(scope), render(body)),
         Expr::Select {
             value,
             path,

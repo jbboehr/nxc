@@ -25,6 +25,10 @@ fn expressions() -> impl Strategy<Value = Expr> {
     ]
     .prop_recursive(5, 64, 2, |inner| {
         prop_oneof![
+            (inner.clone(), inner.clone()).prop_map(|(scope, body)| Expr::With {
+                scope: Box::new(scope),
+                body: Box::new(body),
+            }),
             (inner.clone(), inner.clone()).prop_map(|(value, body)| Expr::Let {
                 bindings: vec![Binding::Assign {
                     path: vec!["local".into(), "yield".into()],

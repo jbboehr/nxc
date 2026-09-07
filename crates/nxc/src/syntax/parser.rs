@@ -306,7 +306,19 @@ pub(super) fn parse(tokens: &[Token], source_len: usize) -> (Option<Node>, Vec<D
             .collect::<Vec<_>>()
             .delimited_by(just(K::LParen), just(K::RParen));
 
-        let atom = choice((integer, variable, paren, attrset, let_expr, string, list)).boxed();
+        let with_expr = just(K::With)
+            .ignore_then(arguments.clone())
+            .try_map(|children, span| {
+                if children.len() != 2 {
+                    return Err(Rich::custom(span, "with requires a context and a body"));
+                }
+                Ok(Node::new(K::WithExpr, span, children))
+            });
+
+        let atom = choice((
+            integer, variable, paren, attrset, let_expr, with_expr, string, list,
+        ))
+        .boxed();
         // Native `or` takes a simple expression: a call/arithmetic/lambda in
         // the fallback needs parentheses. Nested selections extend right.
         let simple = recursive(|simple| {

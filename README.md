@@ -10,7 +10,7 @@ A C/Rust-flavored concrete syntax for Nix with unchanged Nix evaluation semantic
 The current subset supports identifiers, integer literals, parentheses,
 arithmetic (`+`, `-`, `*`, `/`, and unary `-`), curried function calls, and lambdas
 with simple or attribute-pattern parameters. Static attrsets and attribute
-selections, lists, `let` expressions, double-quoted and indented strings, and
+selections, lists, `let` and `with` expressions, double-quoted and indented strings, and
 string interpolation are also supported.
 
 For example, `f(1 + 2, x)` converts to native Nix equivalent to `f (1 + 2) x`.
@@ -88,6 +88,19 @@ arithmetic, and selections, for example `f(let { yield 1; })` or
 supported variable name; `fn`, `yield`, `or`, `__curPos`, and `__nxc_*` remain
 reserved there. Nested attribute names keep the attrset rules.
 
+Use `with(context, expression)` to make attributes from a context available
+inside an expression:
+
+```nix
+with({ x = 2; }, x + 1)
+```
+
+This converts to native `with { x = 2; }; x + 1` and evaluates to `3` in Nix.
+Lexical bindings take priority over context attributes; nested `with` expressions
+prefer the inner context. An unused context remains unevaluated. The form
+requires exactly two expressions and permits a trailing comma. It can appear
+directly in other expressions, such as `[with(pkgs, git), with(pkgs, ripgrep)]`.
+
 Use `value.a.b` to select an attribute and `value.a or fallback` for a missing
 attribute. `or` keeps Nix's tight precedence: `s.f or fallback(x)` means
 `(s.f or fallback)(x)`, and `s.a or 2 + 3` means `(s.a or 2) + 3`. Parenthesize
@@ -112,7 +125,7 @@ while `[a, -b]` contains two elements. Likewise, `[f (x)]` contains one call;
 use `[f, (x)]` for two elements. Generated nxc always includes commas between
 elements. Conversion preserves element order, nesting, and lazy evaluation.
 Native Nix input keeps its own list rules, including parentheses around calls,
-arithmetic, lambdas, and `let ... in ...` used as individual elements.
+arithmetic, lambdas, `let ... in ...`, and `with ...; ...` used as individual elements.
 
 Double-quoted strings use Nix's escapes and `${...}` interpolation. Expressions
 inside interpolations use nxc syntax, including explicit function calls:
@@ -155,7 +168,7 @@ Integer literals range from `0` to `9223372036854775807`; negative values use un
 Attribute paths have at most 128 components, and dotted bindings count toward
 semantic nesting. Generated output must fit these limits as well.
 
-Quoted/dynamic attributes, attribute-existence tests (`?`), paths, `if`, `with`,
+Quoted/dynamic attributes, attribute-existence tests (`?`), paths, `if`,
 and `assert` are not implemented yet. The older native `let { body = ...; }`
 syntax is also unsupported.
 

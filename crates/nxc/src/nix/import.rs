@@ -137,7 +137,18 @@ fn syntax(node: &impl ast::AstNode) -> &rnix::SyntaxNode {
     node.syntax()
 }
 
-fn lower(node: ast::Expr, depth: usize) -> Result<Expr, Diagnostic> {
+fn lower(mut node: ast::Expr, depth: usize) -> Result<Expr, Diagnostic> {
+    // Parentheses do not add semantic depth. Unwrap them without adding stack
+    // frames so fully parenthesized output still fits the supported depth.
+    while let ast::Expr::Paren(paren) = node {
+        node = paren.expr().ok_or_else(|| {
+            let range = syntax(&paren).text_range();
+            Diagnostic::new(
+                usize::from(range.start())..usize::from(range.end()),
+                "missing parenthesized expression",
+            )
+        })?;
+    }
     let range = syntax(&node).text_range();
     let span = usize::from(range.start())..usize::from(range.end());
     let error = |message: &str| Diagnostic::new(span.clone(), message);
@@ -169,12 +180,6 @@ fn lower(node: ast::Expr, depth: usize) -> Result<Expr, Diagnostic> {
                 .map_err(|_| error("integer literal exceeds the Nix signed 64-bit range"))?;
             Ok(Expr::Integer(value as u64))
         }
-        ast::Expr::Paren(paren) => lower(
-            paren
-                .expr()
-                .ok_or_else(|| error("missing parenthesized expression"))?,
-            depth,
-        ),
         ast::Expr::Apply(apply) => Ok(Expr::Apply {
             function: Box::new(child(apply.lambda())?),
             argument: Box::new(child(apply.argument())?),
@@ -188,6 +193,10 @@ fn lower(node: ast::Expr, depth: usize) -> Result<Expr, Diagnostic> {
         ast::Expr::LetIn(local) => Ok(Expr::Let {
             bindings: lower_bindings(&local, depth)?,
             body: Box::new(child(local.body())?),
+        }),
+        ast::Expr::With(with) => Ok(Expr::With {
+            scope: Box::new(child(with.namespace())?),
+            body: Box::new(child(with.body())?),
         }),
         ast::Expr::Select(select) => Ok(Expr::Select {
             value: Box::new(child(select.expr())?),

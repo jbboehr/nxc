@@ -69,6 +69,10 @@ impl Expression {
                 bindings: lower_bindings(&self.0)?,
                 body: Box::new(child()?),
             }),
+            K::WithExpr => Ok(Expr::With {
+                scope: Box::new(child()?),
+                body: Box::new(child()?),
+            }),
             K::SelectExpr => Ok(Expr::Select {
                 value: Box::new(child()?),
                 path: lower_path(&self.0)?,

@@ -59,6 +59,7 @@ fn render(expr: &Expr) -> String {
             super::bindings(bindings, render),
             render(body)
         ),
+        Expr::With { scope, body } => format!("with({}, {})", render(scope), render(body)),
         Expr::Select {
             value,
             path,
