@@ -5,6 +5,14 @@ use nxc::{
 };
 use proptest::prelude::*;
 
+fn attribute_names() -> impl Strategy<Value = String> {
+    prop::collection::vec(
+        any::<char>().prop_filter("Nix names exclude NUL", |c| *c != '\0'),
+        0..16,
+    )
+    .prop_map(|chars| chars.into_iter().collect())
+}
+
 fn expressions() -> impl Strategy<Value = Expr> {
     prop_oneof![
         prop::collection::vec(
@@ -58,27 +66,34 @@ fn expressions() -> impl Strategy<Value = Expr> {
                 StringPart::Interpolation(value),
                 StringPart::Literal("${suffix}\\\"".into()),
             ])),
-            (inner.clone(), any::<bool>()).prop_map(|(value, recursive)| Expr::AttrSet {
-                recursive,
-                bindings: vec![Binding::Assign {
-                    path: vec!["a".into(), "fn".into()],
-                    value
-                }],
-            }),
-            inner.clone().prop_map(|source| Expr::AttrSet {
+            (inner.clone(), any::<bool>(), attribute_names()).prop_map(
+                |(value, recursive, name)| Expr::AttrSet {
+                    recursive,
+                    bindings: vec![Binding::Assign {
+                        path: vec!["a".into(), name],
+                        value
+                    }],
+                }
+            ),
+            (inner.clone(), attribute_names()).prop_map(|(source, name)| Expr::AttrSet {
                 recursive: false,
                 bindings: vec![Binding::Inherit {
                     source: Some(source),
-                    names: vec!["a".into(), "or".into()]
+                    names: vec![name]
                 }],
             }),
-            (inner.clone(), prop::option::of(inner.clone())).prop_map(|(value, default)| {
-                Expr::Select {
-                    value: Box::new(value),
-                    path: vec!["a".into(), "b".into()],
-                    default: default.map(Box::new),
-                }
-            }),
+            (
+                inner.clone(),
+                prop::option::of(inner.clone()),
+                attribute_names()
+            )
+                .prop_map(|(value, default, name)| {
+                    Expr::Select {
+                        value: Box::new(value),
+                        path: vec!["a".into(), name],
+                        default: default.map(Box::new),
+                    }
+                }),
             inner.clone().prop_map(|body| Expr::Lambda {
                 parameter: Pattern::Ident("x".into()),
                 body: Box::new(body),

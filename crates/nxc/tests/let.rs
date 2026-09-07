@@ -219,7 +219,7 @@ fn let_bindings_reject_conflicts_and_reserved_variable_names() {
         "__nxc_private.x = 1;",
         "inherit (src) fn;",
         "inherit yield;",
-        "\"quoted\" = 1;",
+        "''quoted'' = 1;",
         "${name} = 1;",
     ] {
         let source = format!("let {{ {bindings} yield 1; }}");

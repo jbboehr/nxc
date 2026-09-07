@@ -465,10 +465,26 @@ fn lower_attr(attr: ast::Attr) -> Result<String, Diagnostic> {
     match attr {
         ast::Attr::Ident(ident) => {
             let name = syntax(&ident).text().to_string();
-            ir::validate_attr_name(&name).map_err(error)?;
+            ir::validate_bare_attr_name(&name).map_err(error)?;
             Ok(name)
         }
-        _ => Err(error("quoted and dynamic attributes are not supported yet")),
+        ast::Attr::Str(string) => {
+            if !syntax(&string)
+                .first_token()
+                .is_some_and(|token| token.text() == "\"")
+            {
+                return Err(error("attribute names require double quotes"));
+            }
+            if string
+                .parts()
+                .any(|part| matches!(part, ast::InterpolPart::Interpolation(_)))
+            {
+                return Err(error("dynamic attributes are not supported yet"));
+            }
+            let text = syntax(&string).text().to_string();
+            crate::string::decode(&text[1..text.len() - 1]).map_err(error)
+        }
+        _ => Err(error("dynamic attributes are not supported yet")),
     }
 }
 

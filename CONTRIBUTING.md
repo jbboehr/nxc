@@ -20,8 +20,9 @@ support is provided by `.envrc` (`direnv allow`).
 The current subset implements identifiers, integers, parentheses, arithmetic,
 comparison and Boolean operators, calls, and simple/attribute-pattern lambdas in
 both conversion directions.
-It also includes static attrsets, dotted bindings, inheritance, and selections
-with defaults, lists and concatenation, `let`, `with`, `if`, and `assert` expressions,
+It also includes static attrsets with bare/quoted names, dotted bindings,
+inheritance, and selections with defaults, lists and concatenation, `let`, `with`,
+`if`, and `assert` expressions,
 double-quoted/indented strings, interpolation, literal relative paths, native
 implication normalization, and native attrset updates through a reserved compatibility form.
 `nxc` provides `check`, `to-nix`,
@@ -211,15 +212,24 @@ sources. Avoid sorting or expanding bindings: when Nix merges literal nested
 sets, the first declaration's recursive flag can affect scope. Structural
 validation checks static binding conflicts after the entire IR passes resource
 bounds. Inheritance remains distinct from assignment to preserve its scope.
-Static attribute names have separate validation from variable names; bare names
-such as `fn` and `or` are permitted in attribute positions. Quoted and dynamic
-attributes remain unsupported.
+Static attribute paths and inheritance names store decoded strings, so quoted
+and bare spellings of the same key compare equal and participate in the same
+conflict checks. Both frontends reuse the double-quoted string decoder and
+reject interpolated or indented attribute names before decoding. Emission
+quotes names that cannot be bare identifiers and shares string escaping.
+Names count toward the aggregate literal-byte budget, and NUL is rejected.
+Quoted keys use flat `AttrName` CST nodes to retain the existing nesting bounds.
+This follows native Nix's
+[attribute grammar](https://github.com/NixOS/nix/blob/2.34.8/src/libexpr/parser.y).
+Dynamic names remain a later slice.
 
 `Expr::Let` reuses ordered bindings and retains a separate body. Bindings are
 neither expanded into assignments nor rewritten as recursive attrset selections;
 plain inheritance keeps its outer-scope lookup. The first path component and
-inherited names bind variables, so they use variable-name validation even for
-`inherit (source)`. Remaining path components use attribute-name validation.
+inherited names may use quoted static strings, including names that are not
+identifiers. They retain the variable-name reservations even when quoted or
+inherited through `inherit (source)`. Remaining path components use
+attribute-name validation.
 Both binding values and the body pass the shared resource checks.
 
 The nxc parser treats the delimited `let { ... yield ...; }` form as an atom.
@@ -296,7 +306,7 @@ Both quote styles use the same CST string nodes and canonical IR. The lexer
 tracks the quote style in its iterative mode stack. Canonical output uses double
 quotes and escapes every literal dollar to preserve interpolation boundaries.
 String and interpolation delimiters count toward nesting limits in both paths.
-Quoted/dynamic attribute paths remain a later slice.
+Dynamic attribute paths remain a later slice.
 
 `Expr::RelativePath` preserves literal relative path text without filesystem
 access, resolution, or normalization. Logos recognizes path-shaped text before

@@ -141,7 +141,12 @@ pub(super) fn parse(tokens: &[Token], source_len: usize) -> (Option<Node>, Vec<D
             });
 
         let attr_name = one_of([K::Ident, K::Or, K::Fn, K::Yield, K::UpdateIntrinsic])
-            .map_with(|_, e| Node::new(K::AttrName, e.span(), vec![]));
+            .map_with(|_, e| Node::new(K::AttrName, e.span(), vec![]))
+            .or(just(K::StringContent)
+                .repeated()
+                .delimited_by(just(K::StringStart), just(K::StringEnd))
+                // Static keys have no expression children, just like bare names.
+                .map_with(|_, e| Node::new(K::AttrName, e.span(), vec![])));
         let path = attr_name
             .separated_by(just(K::Dot))
             .at_least(1)
@@ -302,6 +307,7 @@ pub(super) fn parse(tokens: &[Token], source_len: usize) -> (Option<Node>, Vec<D
                     K::GreaterEqual,
                     K::AndAnd,
                     K::OrOr,
+                    K::Or,
                 ])
                 .not(),
             )

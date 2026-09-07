@@ -99,10 +99,10 @@ fn malformed_and_dynamic_attributes_are_rejected_losslessly() {
         "s.1",
         "{ 1 = 2; }",
         "{ rec = 1; }",
-        "{ \"a\" = 1; }",
+        "{ \"${a}\" = 1; }",
         "{ ${x} = 1; }",
         "s.${x}",
-        "s.\"x\"",
+        "s.\"${x}\"",
         "s ? x",
         "let x = 1; in x",
     ] {
@@ -183,7 +183,7 @@ fn emitters_reject_invalid_paths_and_bindings_from_callers() {
         },
         Expr::Select {
             value: Box::new(Expr::Integer(1)),
-            path: vec!["x; y".into()],
+            path: vec!["x;\0y".into()],
             default: None,
         },
         Expr::AttrSet {
@@ -196,7 +196,7 @@ fn emitters_reject_invalid_paths_and_bindings_from_callers() {
         Expr::AttrSet {
             recursive: false,
             bindings: vec![Binding::Assign {
-                path: vec!["rec".into()],
+                path: vec!["rec\0".into()],
                 value: Expr::Integer(1),
             }],
         },

@@ -76,8 +76,8 @@ fn malformed_and_unsupported_strings_remain_lossless_errors() {
         r#""${@}""#,
         r#""${"nested}""#,
         "\"a\0b\"",
-        r#"{ "quoted" = 1; }"#,
-        r#"s."quoted""#,
+        r#"{ "${quoted}" = 1; }"#,
+        r#"s."${quoted}""#,
         r#""${a ? b}""#,
     ] {
         let parsed = syntax::parse(source);

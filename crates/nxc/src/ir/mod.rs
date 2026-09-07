@@ -39,6 +39,7 @@ pub enum Expr {
     },
     Select {
         value: Box<Expr>,
+        /// Decoded static names; dots within a name are not path separators.
         path: Vec<String>,
         default: Option<Box<Expr>>,
     },
@@ -82,6 +83,7 @@ pub(crate) fn push_string_literal(parts: &mut Vec<StringPart>, text: String) {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Binding {
     Assign {
+        /// Decoded static names, independent of identifier or quoted spelling.
         path: Vec<String>,
         value: Expr,
     },
@@ -148,7 +150,7 @@ impl BinaryOp {
     }
 }
 
-pub(crate) fn validate_attr_name(name: &str) -> Result<(), &'static str> {
+pub(crate) fn validate_bare_attr_name(name: &str) -> Result<(), &'static str> {
     let mut chars = name.chars();
     if !chars
         .next()
@@ -167,7 +169,12 @@ pub(crate) fn validate_attr_name(name: &str) -> Result<(), &'static str> {
 }
 
 pub(crate) fn validate_name(name: &str) -> Result<(), &'static str> {
-    validate_attr_name(name)?;
+    validate_bare_attr_name(name)?;
+    validate_scoped_name(name)
+}
+
+// Quoting a name may broaden its spelling, but does not unreserve intrinsics.
+fn validate_scoped_name(name: &str) -> Result<(), &'static str> {
     if name.starts_with("__nxc_") || matches!(name, "__curPos" | "fn" | "yield" | "or") {
         return Err("reserved form is not supported yet");
     }
@@ -274,9 +281,10 @@ impl Expr {
                     for binding in bindings {
                         match binding {
                             Binding::Assign { path, value } => {
-                                validate_path(path, &mut count).map_err(error)?;
+                                validate_path(path, &mut count, &mut literal_bytes)
+                                    .map_err(error)?;
                                 if local {
-                                    validate_name(&path[0]).map_err(error)?;
+                                    validate_scoped_name(&path[0]).map_err(error)?;
                                 }
                                 // Dotted bindings introduce implicit nested attrsets.
                                 pending.push((value, depth + path.len()));
@@ -287,12 +295,10 @@ impl Expr {
                                 }
                                 count += names.len();
                                 for name in names {
-                                    if source.is_some() && !local {
-                                        validate_attr_name(name)
-                                    } else {
-                                        validate_name(name)
+                                    validate_attr_name(name, &mut literal_bytes).map_err(error)?;
+                                    if source.is_none() || local {
+                                        validate_scoped_name(name).map_err(error)?;
                                     }
-                                    .map_err(error)?;
                                 }
                                 if let Some(source) = source {
                                     pending.push((source, depth + 1));
@@ -306,7 +312,7 @@ impl Expr {
                     path,
                     default,
                 } => {
-                    validate_path(path, &mut count).map_err(error)?;
+                    validate_path(path, &mut count, &mut literal_bytes).map_err(error)?;
                     pending.push((value, depth + 1));
                     if let Some(default) = default {
                         pending.push((default, depth + 1));
@@ -371,7 +377,22 @@ impl Expr {
     }
 }
 
-fn validate_path(path: &[String], count: &mut usize) -> Result<(), &'static str> {
+fn validate_attr_name(name: &str, literal_bytes: &mut usize) -> Result<(), &'static str> {
+    if name.len() > crate::MAX_SOURCE_BYTES - *literal_bytes {
+        return Err("attribute names exceed the source size limit");
+    }
+    if name.contains('\0') {
+        return Err("attribute names cannot contain null bytes");
+    }
+    *literal_bytes += name.len();
+    Ok(())
+}
+
+fn validate_path(
+    path: &[String],
+    count: &mut usize,
+    literal_bytes: &mut usize,
+) -> Result<(), &'static str> {
     if path.is_empty() {
         return Err("attribute path must not be empty");
     }
@@ -380,7 +401,7 @@ fn validate_path(path: &[String], count: &mut usize) -> Result<(), &'static str>
     }
     *count += path.len();
     for name in path {
-        validate_attr_name(name)?;
+        validate_attr_name(name, literal_bytes)?;
     }
     Ok(())
 }

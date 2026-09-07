@@ -11,20 +11,7 @@ pub(crate) fn string(
     let mut source = String::from("\"");
     for part in parts {
         match part {
-            StringPart::Literal(text) => {
-                for character in text.chars() {
-                    match character {
-                        '"' => source.push_str("\\\""),
-                        '\\' => source.push_str("\\\\"),
-                        // Escape every dollar, including one next to an interpolation.
-                        '$' => source.push_str("\\$"),
-                        '\n' => source.push_str("\\n"),
-                        '\r' => source.push_str("\\r"),
-                        '\t' => source.push_str("\\t"),
-                        other => source.push(other),
-                    }
-                }
-            }
+            StringPart::Literal(text) => escape_literal(text, &mut source),
             StringPart::Interpolation(value) => {
                 source.push_str("${");
                 source.push_str(&render(value));
@@ -34,6 +21,38 @@ pub(crate) fn string(
     }
     source.push('"');
     source
+}
+
+fn escape_literal(text: &str, source: &mut String) {
+    for character in text.chars() {
+        match character {
+            '"' => source.push_str("\\\""),
+            '\\' => source.push_str("\\\\"),
+            // Escape every dollar, including one next to an interpolation.
+            '$' => source.push_str("\\$"),
+            '\n' => source.push_str("\\n"),
+            '\r' => source.push_str("\\r"),
+            '\t' => source.push_str("\\t"),
+            other => source.push(other),
+        }
+    }
+}
+
+fn attribute(name: &str) -> String {
+    if crate::ir::validate_bare_attr_name(name).is_ok() {
+        return name.to_owned();
+    }
+    let mut source = String::from("\"");
+    escape_literal(name, &mut source);
+    source.push('"');
+    source
+}
+
+fn attribute_path(path: &[String]) -> String {
+    path.iter()
+        .map(|name| attribute(name))
+        .collect::<Vec<_>>()
+        .join(".")
 }
 
 pub(crate) fn attrset(
@@ -58,7 +77,7 @@ pub(crate) fn bindings(
         source.push(' ');
         match binding {
             Binding::Assign { path, value } => {
-                source.push_str(&format!("{} = {};", path.join("."), render(value)));
+                source.push_str(&format!("{} = {};", attribute_path(path), render(value)));
             }
             Binding::Inherit {
                 source: from,
@@ -70,7 +89,7 @@ pub(crate) fn bindings(
                 }
                 for name in names {
                     source.push(' ');
-                    source.push_str(name);
+                    source.push_str(&attribute(name));
                 }
                 source.push(';');
             }
@@ -85,7 +104,7 @@ pub(crate) fn selection(
     default: Option<&crate::ir::Expr>,
     render: fn(&crate::ir::Expr) -> String,
 ) -> String {
-    let mut source = format!("(({}).{}", render(value), path.join("."));
+    let mut source = format!("(({}).{}", render(value), attribute_path(path));
     if let Some(default) = default {
         source.push_str(&format!(" or ({})", render(default)));
     }

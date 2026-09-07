@@ -215,8 +215,8 @@ fn lower_bindings(node: &SyntaxNode, depth: usize) -> Result<Vec<Binding>, Diagn
                 names: binding
                     .children()
                     .filter(|n| n.kind() == K::AttrName)
-                    .map(|name| name.text().to_string())
-                    .collect(),
+                    .map(|name| lower_attr(&name))
+                    .collect::<Result<_, _>>()?,
             }),
             _ => Err(error("cannot lower an erroneous binding")),
         })
@@ -259,11 +259,33 @@ fn lower_path(node: &SyntaxNode) -> Result<Vec<String>, Diagnostic> {
                 "missing attribute path",
             )
         })?;
-    Ok(path
-        .children()
+    path.children()
         .filter(|node| node.kind() == K::AttrName)
-        .map(|node| node.text().to_string())
-        .collect())
+        .map(|node| lower_attr(&node))
+        .collect()
+}
+
+fn lower_attr(node: &SyntaxNode) -> Result<String, Diagnostic> {
+    let range = node.text_range();
+    let error = |message| {
+        Diagnostic::new(
+            usize::from(range.start())..usize::from(range.end()),
+            message,
+        )
+    };
+    let name = node.text().to_string();
+    if node
+        .first_token()
+        .is_some_and(|token| token.kind() == K::StringStart)
+    {
+        if !name.starts_with('"') {
+            return Err(error("attribute names require double quotes"));
+        }
+        crate::string::decode(&name[1..name.len() - 1]).map_err(error)
+    } else {
+        ir::validate_bare_attr_name(&name).map_err(error)?;
+        Ok(name)
+    }
 }
 
 fn lower_pattern(node: &SyntaxNode, depth: usize) -> Result<Pattern, Diagnostic> {

@@ -157,7 +157,7 @@ fn indented_chunks(mut text: &str) -> impl Iterator<Item = Result<(&str, bool), 
 }
 
 /// Decode a double-quoted Nix string fragment, without its delimiters.
-fn decode(text: &str) -> Result<String, &'static str> {
+pub(crate) fn decode(text: &str) -> Result<String, &'static str> {
     let mut result = String::with_capacity(text.len());
     let mut chars = text.chars().peekable();
     while let Some(character) = chars.next() {

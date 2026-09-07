@@ -98,7 +98,12 @@ and both forms of `inherit`:
 ```
 
 Attrset bindings and selections accept bare static attribute names, including
-attribute names such as `fn`, `yield`, and `or`. Binding conflicts are rejected;
+attribute names such as `fn`, `yield`, and `or`. Double quotes allow names such
+as `"foo.bar"`, `"a b"`, `"if"`, and `""`. For example,
+`{ "foo.bar" = 1; }."foo.bar"` evaluates to `1`; the dot inside the name does
+not create a nested attribute. Quoted names use the same escapes as strings,
+and also work in `inherit (source) "a b";`. Conversion may remove quotes when
+the decoded name is a valid bare attribute name. Binding conflicts are rejected;
 literal nested attrsets merge according to Nix's rules. Values remain lazy, and
 `inherit x` retains its enclosing-scope lookup even inside a recursive attrset.
 
@@ -120,9 +125,10 @@ once, must be the final item, and needs a semicolon. It does not return early.
 
 A `let` block is an expression and can appear directly in calls, lists,
 arithmetic, and selections, for example `f(let { yield 1; })` or
-`let { yield { a = 1; }; }.a`. The first component of a local binding must be a
-supported variable name; `fn`, `yield`, `or`, `__curPos`, and `__nxc_*` remain
-reserved there. Nested attribute names keep the attrset rules.
+`let { yield { a = 1; }; }.a`. Local bindings can use quoted names too:
+`let { "a b" = 1; yield { inherit "a b"; }; }`. The names `fn`, `yield`, `or`,
+`__curPos`, and `__nxc_*` remain reserved in local bindings and plain inheritance,
+including when quoted. Lambda parameters still require supported identifiers.
 
 Use `with(context, expression)` to make attributes from a context available
 inside an expression:
@@ -255,7 +261,8 @@ Native attrset updates (`//`) round-trip through the reserved internal form
 `__nxc_update(a, b)`. This is converter compatibility syntax; the public update
 syntax is still undecided. `//` remains a line comment in nxc.
 
-Quoted/dynamic attributes, attribute-existence tests (`?`), absolute paths,
+Dynamic attribute names (including quoted names with interpolation),
+attribute-existence tests (`?`), absolute paths,
 home-relative paths, search paths, and interpolated paths are not implemented yet.
 The older native `let { body = ...; }` syntax is also unsupported.
 Native import currently requires parentheses around `!` expressions
