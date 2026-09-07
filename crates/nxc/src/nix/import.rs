@@ -188,10 +188,18 @@ fn lower(mut node: ast::Expr, depth: usize) -> Result<Expr, Diagnostic> {
                 .map_err(|_| error("integer literal exceeds the Nix signed 64-bit range"))?;
             Ok(Expr::Integer(value as u64))
         }
-        ast::Expr::Apply(apply) => Ok(Expr::Apply {
-            function: Box::new(child(apply.lambda())?),
-            argument: Box::new(child(apply.argument())?),
-        }),
+        ast::Expr::Apply(apply) => {
+            let argument = apply.argument();
+            // rnix accepts bare lambda arguments, but Nix requires parentheses.
+            // Check before child lowering removes the parenthesized wrapper.
+            if matches!(argument, Some(ast::Expr::Lambda(_))) {
+                return Err(error("native lambda arguments require parentheses"));
+            }
+            Ok(Expr::Apply {
+                function: Box::new(child(apply.lambda())?),
+                argument: Box::new(child(argument)?),
+            })
+        }
         ast::Expr::List(list) => lower_list(list, depth),
         ast::Expr::Str(string) => lower_string(string, depth),
         ast::Expr::AttrSet(set) => Ok(Expr::AttrSet {
@@ -291,6 +299,7 @@ fn lower(mut node: ast::Expr, depth: usize) -> Result<Expr, Diagnostic> {
                 Some(ast::BinOpKind::And) => BinaryOp::And,
                 Some(ast::BinOpKind::Or) => BinaryOp::Or,
                 Some(ast::BinOpKind::Update) => BinaryOp::Update,
+                Some(ast::BinOpKind::Concat) => BinaryOp::Concat,
                 _ => return Err(error("native Nix operator is not supported yet")),
             };
             Ok(Expr::Binary {

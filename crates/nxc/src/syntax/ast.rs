@@ -150,6 +150,7 @@ impl Expression {
                     .filter_map(|it| it.into_token())
                     .find_map(|token| match token.kind() {
                         K::Plus => Some(BinaryOp::Add),
+                        K::PlusPlus => Some(BinaryOp::Concat),
                         K::Minus => Some(BinaryOp::Subtract),
                         K::Star => Some(BinaryOp::Multiply),
                         K::Slash => Some(BinaryOp::Divide),

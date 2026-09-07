@@ -33,6 +33,8 @@ pub enum SyntaxKind {
     Comma,
     #[token("+")]
     Plus,
+    #[token("++")]
+    PlusPlus,
     #[token("-")]
     Minus,
     #[token("*")]
@@ -195,6 +197,7 @@ impl std::fmt::Display for SyntaxKind {
             Self::RBracket => "']'",
             Self::Comma => "','",
             Self::Plus => "'+'",
+            Self::PlusPlus => "'++'",
             Self::Minus => "'-'",
             Self::Star => "'*'",
             Self::Slash => "'/'",
@@ -260,6 +263,7 @@ impl rowan::Language for NxcLanguage {
             RBracket,
             Comma,
             Plus,
+            PlusPlus,
             Minus,
             Star,
             Slash,

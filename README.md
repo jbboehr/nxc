@@ -40,6 +40,7 @@ tightest to loosest:
 | Operators | Meaning |
 | --- | --- |
 | unary `-` | Arithmetic negation |
+| `++` | List concatenation |
 | `*`, `/` | Multiplication, division |
 | `+`, `-` | Addition, subtraction |
 | `!` | Boolean negation |
@@ -52,6 +53,7 @@ Arithmetic and Boolean binary operators associate to the left. Comparisons in
 the same group require parentheses when nested: `a < b < c` and `a == b != c`
 are errors. Use `a < b && b < c` to combine two comparisons.
 `!a + b` means `!(a + b)`, while `!a == b` means `(!a) == b`.
+List concatenation associates to the right: `a ++ b ++ c` means `a ++ (b ++ c)`.
 
 `&&` and `||` preserve Nix's short-circuit evaluation: `false && (1 / 0)` is
 `false`, and `true || (1 / 0)` is `true`. Conversion leaves operand type checks,
@@ -189,6 +191,9 @@ Native Nix input keeps its own list rules, including parentheses around calls,
 operators, lambdas, conditionals, `let ... in ...`, and `with ...; ...` used as
 individual elements.
 
+`++` concatenates lists: `[1, 2] ++ [3]` evaluates to `[1, 2, 3]`. Nix evaluates
+both list operands while leaving their elements lazy; nested lists stay nested.
+
 Double-quoted strings use Nix's escapes and `${...}` interpolation. Expressions
 inside interpolations use nxc syntax, including explicit function calls:
 
@@ -236,9 +241,9 @@ syntax is still undecided. `//` remains a line comment in nxc.
 
 Quoted/dynamic attributes, attribute-existence tests (`?`), and paths are not
 implemented yet. The older native `let { body = ...; }` syntax is also unsupported.
-List concatenation (`++`) and implication (`->`) remain unsupported.
+Implication (`->`) remains unsupported.
 Native import currently requires parentheses around `!` expressions
-nested inside arithmetic, such as `-(!x)`.
+nested inside arithmetic or concatenation, such as `-(!x)` or `a ++ (!b)`.
 
 A complete conversion example:
 

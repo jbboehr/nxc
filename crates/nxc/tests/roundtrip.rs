@@ -101,7 +101,7 @@ fn malformed_and_unsupported_nxc_is_rejected() {
         "a/b",
         "1/2",
         "x -> y",
-        "x ++ y",
+        "x +++ y",
         "9223372036854775808",
         "1 /* unterminated",
     ] {
@@ -117,7 +117,7 @@ fn unsupported_native_forms_are_never_guessed() {
         "1.5",
         "a ? b",
         "./foo",
-        "a ++ b",
+        "a +++ b",
         "a -> b",
         "fn",
         "yield",

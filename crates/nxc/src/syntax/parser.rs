@@ -4,7 +4,7 @@ use super::{SyntaxKind as K, lexer::Token};
 use crate::Diagnostic;
 use chumsky::{
     input::Stream,
-    pratt::{infix, left, none, postfix, prefix},
+    pratt::{infix, left, none, postfix, prefix, right},
     prelude::*,
     recovery::{nested_delimiters, via_parser},
 };
@@ -277,6 +277,7 @@ pub(super) fn parse(tokens: &[Token], source_len: usize) -> (Option<Node>, Vec<D
             .then_ignore(
                 one_of([
                     K::Plus,
+                    K::PlusPlus,
                     K::Minus,
                     K::Star,
                     K::Slash,
@@ -392,13 +393,13 @@ pub(super) fn parse(tokens: &[Token], source_len: usize) -> (Option<Node>, Vec<D
             .ignore_then(path)
             .then(just(K::Or).ignore_then(simple).or_not());
         let operators = atom.pratt((
-            postfix(9, arguments, |function, arguments: Vec<Node>, e| {
+            postfix(10, arguments, |function, arguments: Vec<Node>, e| {
                 let mut children = vec![function];
                 children.extend(arguments);
                 Node::new(K::CallExpr, e.span(), children)
             }),
             postfix(
-                9,
+                10,
                 selection,
                 |value, (path, default): (Node, Option<Node>), e| {
                     let mut children = vec![value, path];
@@ -406,8 +407,11 @@ pub(super) fn parse(tokens: &[Token], source_len: usize) -> (Option<Node>, Vec<D
                     Node::new(K::SelectExpr, e.span(), children)
                 },
             ),
-            prefix(8, just(K::Minus), |_, operand, e| {
+            prefix(9, just(K::Minus), |_, operand, e| {
                 Node::new(K::NegateExpr, e.span(), vec![operand])
+            }),
+            infix(right(8), just(K::PlusPlus), |lhs, _, rhs, e| {
+                Node::new(K::BinaryExpr, e.span(), vec![lhs, rhs])
             }),
             infix(left(7), one_of([K::Star, K::Slash]), |lhs, _, rhs, e| {
                 Node::new(K::BinaryExpr, e.span(), vec![lhs, rhs])

@@ -180,7 +180,7 @@ fn malformed_and_unsupported_operator_inputs_stay_lossless_and_recover() {
         "a ||| b",
         "a ** b",
         "a -> b",
-        "a ++ b",
+        "a +++ b",
         "a |> b",
         "a <| b",
         "<nixpkgs>",

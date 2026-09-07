@@ -122,6 +122,7 @@ pub enum BinaryOp {
     And,
     Or,
     Update,
+    Concat,
 }
 
 impl BinaryOp {
@@ -140,6 +141,7 @@ impl BinaryOp {
             Self::And => "&&",
             Self::Or => "||",
             Self::Update => "//",
+            Self::Concat => "++",
         }
     }
 }

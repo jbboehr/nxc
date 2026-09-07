@@ -21,7 +21,7 @@ The current subset implements identifiers, integers, parentheses, arithmetic,
 comparison and Boolean operators, calls, and simple/attribute-pattern lambdas in
 both conversion directions.
 It also includes static attrsets, dotted bindings, inheritance, and selections
-with defaults, lists, `let`, `with`, `if`, and `assert` expressions,
+with defaults, lists and concatenation, `let`, `with`, `if`, and `assert` expressions,
 double-quoted/indented strings, interpolation, and native attrset updates through
 a reserved compatibility form. `nxc` provides `check`, `to-nix`,
 and `from-nix`.
@@ -53,8 +53,8 @@ short-circuit Boolean operators, comparison values and lazy collection equality,
 shallow attrset updates, operand forcing and lazy overridden attributes,
 argument validation, recursive set merges, local binding and `with` scope, inheritance,
 lazy conditional branches, assertion failures and evaluation order,
-list boundaries/laziness, string coercion/context,
-and evaluation failures; it skips only when
+list boundaries/laziness, concatenation order and operand forcing,
+string coercion/context, and evaluation failures; it skips only when
 `nix-instantiate` is unavailable.
 Nix is provided in the dev
 shell and package checks. The oracle uses Nix's dummy store so it can run inside
@@ -164,10 +164,17 @@ references, preserving Nix shadowing behavior.
 `Expr::Not` and the comparison/Boolean `BinaryOp` variants retain operand order
 without folding, type checking, or rewriting operators into function calls.
 Both emitters parenthesize operations. Native import rejects bare lambda
-operator operands before removing parentheses; rnix accepts those operands
-although Nix rejects them. Conversely, rnix rejects some valid native prefix
-combinations such as `1 + !true` and `-!true`. These remain explicit parse errors;
-parenthesized operands import normally, and generated output always groups them.
+operator operands and call arguments before removing parentheses; rnix accepts
+those forms although Nix rejects them. Conversely, rnix rejects some valid native
+prefix combinations such as `1 + !true`, `-!true`, and `a ++ !b`. These remain
+explicit parse errors; parenthesized operands import normally, and generated
+output always groups them.
+
+`BinaryOp::Concat` retains both operands and literal list boundaries without
+folding or flattening. Both emitters parenthesize `++` operations. The nxc parser
+uses a right-associative Pratt group between unary minus and multiplication;
+the unfinished-binary recovery guard includes `++` so later items survive an
+invalid operand.
 
 Native `a // b` lowers to `BinaryOp::Update`. The nxc emitter uses the reserved
 compatibility form `__nxc_update(a, b)`, parsed as a special form requiring exactly
