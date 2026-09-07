@@ -55,6 +55,7 @@ pub fn lex(source: &str) -> Vec<Token> {
         let Some(kind) = lexer.next() else { break };
         let mut kind = kind.unwrap_or(K::ErrorToken);
         match kind {
+            K::InterpolationStart => modes.push(Mode::Interpolation { braces: 0 }),
             K::StringStart => modes.push(Mode::String {
                 indented: lexer.slice() == "''",
             }),

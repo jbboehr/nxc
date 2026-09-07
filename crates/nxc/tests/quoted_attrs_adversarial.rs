@@ -19,7 +19,7 @@ fn non_nul_control_characters_remain_static_keys() {
                 value: Expr::Integer(1),
             }],
         }),
-        path: vec![name],
+        path: vec![name.into()],
         default: None,
     };
 

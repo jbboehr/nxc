@@ -1,6 +1,6 @@
 use nxc::{
     MAX_DEPTH, MAX_SOURCE_BYTES, MAX_TOKENS, emit,
-    ir::{BinaryOp, Binding, Expr, Formal, Pattern, StringPart},
+    ir::{AttrName, BinaryOp, Binding, Expr, Formal, Pattern, StringPart},
     nix, parse_nxc, syntax,
 };
 use proptest::prelude::*;
@@ -85,12 +85,20 @@ fn expressions() -> impl Strategy<Value = Expr> {
             (
                 inner.clone(),
                 prop::option::of(inner.clone()),
-                attribute_names()
+                prop::collection::vec(
+                    prop_oneof![
+                        attribute_names().prop_map(AttrName::Static),
+                        inner
+                            .clone()
+                            .prop_map(|key| AttrName::Dynamic(Box::new(key))),
+                    ],
+                    1..4
+                )
             )
-                .prop_map(|(value, default, name)| {
+                .prop_map(|(value, default, path)| {
                     Expr::Select {
                         value: Box::new(value),
-                        path: vec!["a".into(), name],
+                        path,
                         default: default.map(Box::new),
                     }
                 }),

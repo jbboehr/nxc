@@ -21,8 +21,8 @@ The current subset implements identifiers, integers, parentheses, arithmetic,
 comparison and Boolean operators, calls, and simple/attribute-pattern lambdas in
 both conversion directions.
 It also includes static attrsets with bare/quoted names, dotted bindings,
-inheritance, and selections with defaults, lists and concatenation, `let`, `with`,
-`if`, and `assert` expressions,
+inheritance, and static/dynamic selections with defaults, lists and concatenation,
+`let`, `with`, `if`, and `assert` expressions,
 double-quoted/indented strings, interpolation, literal relative paths, native
 implication normalization, and native attrset updates through a reserved compatibility form.
 `nxc` provides `check`, `to-nix`,
@@ -54,6 +54,7 @@ checks generated syntax, precedence, currying, parameter scope, lazy defaults,
 short-circuit Boolean operators, implication normalization, comparison values
 and lazy collection equality,
 shallow attrset updates, operand forcing and lazy overridden attributes,
+dynamic selection keys, coercion and lazy path traversal,
 argument validation, recursive set merges, local binding and `with` scope, inheritance,
 lazy conditional branches, assertion failures and evaluation order,
 list boundaries/laziness, concatenation order and operand forcing,
@@ -212,16 +213,16 @@ sources. Avoid sorting or expanding bindings: when Nix merges literal nested
 sets, the first declaration's recursive flag can affect scope. Structural
 validation checks static binding conflicts after the entire IR passes resource
 bounds. Inheritance remains distinct from assignment to preserve its scope.
-Static attribute paths and inheritance names store decoded strings, so quoted
+Static binding paths and inheritance names store decoded strings, so quoted
 and bare spellings of the same key compare equal and participate in the same
 conflict checks. Both frontends reuse the double-quoted string decoder and
-reject interpolated or indented attribute names before decoding. Emission
-quotes names that cannot be bare identifiers and shares string escaping.
+reject interpolated binding names and indented attribute names before decoding.
+Emission quotes names that cannot be bare identifiers and shares string escaping.
 Names count toward the aggregate literal-byte budget, and NUL is rejected.
-Quoted keys use flat `AttrName` CST nodes to retain the existing nesting bounds.
+Static quoted keys use flat `AttrName` CST nodes to retain the existing nesting bounds.
 This follows native Nix's
 [attribute grammar](https://github.com/NixOS/nix/blob/2.34.8/src/libexpr/parser.y).
-Dynamic names remain a later slice.
+Dynamic bindings remain a later slice.
 
 `Expr::Let` reuses ordered bindings and retains a separate body. Bindings are
 neither expanded into assignments nor rewritten as recursive attrset selections;
@@ -271,8 +272,18 @@ conditional chains beyond the semantic limit return diagnostics without
 exhausting the stack. Parentheses do not consume that depth budget; shared IR
 validation still accounts for implicit nesting in calls and dotted bindings.
 
-Selections retain their full static path and optional lazy default. The parser
-uses Nix's simple-expression precedence for `or`; emitters parenthesize fallback
+Selections retain their full ordered path and optional lazy default. Each
+`AttrName` is either decoded static text or an unevaluated dynamic expression.
+Quoted interpolated names retain an `Expr::String` inside the dynamic key;
+removing that wrapper would change Nix's coercion behavior. Both emitters use
+`${expression}` for dynamic components without folding literal expressions.
+Keeping one path preserves Nix's lookup order and skips later keys after a
+missing prefix when a default is present. Dynamic children count toward the
+same semantic node, byte, and depth bounds as other expressions, even if lazy.
+Selection CST keys sit directly under `SelectExpr` to bound the physical tree
+depth of nested key expressions; assignment paths keep their `AttrPath` wrapper.
+The lexer recognizes `${...}` outside strings using the same interpolation mode.
+The parser uses Nix's simple-expression precedence for `or`; emitters parenthesize fallback
 expressions to preserve the IR. Attribute paths are bounded, and dotted bindings
 contribute their implicit attrset depth to the semantic nesting limit.
 
@@ -306,7 +317,7 @@ Both quote styles use the same CST string nodes and canonical IR. The lexer
 tracks the quote style in its iterative mode stack. Canonical output uses double
 quotes and escapes every literal dollar to preserve interpolation boundaries.
 String and interpolation delimiters count toward nesting limits in both paths.
-Dynamic attribute paths remain a later slice.
+Dynamic binding paths remain a later slice.
 
 `Expr::RelativePath` preserves literal relative path text without filesystem
 access, resolution, or normalization. Logos recognizes path-shaped text before

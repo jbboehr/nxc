@@ -163,7 +163,7 @@ fn decoded_aliases_conflict_but_dots_inside_names_do_not_split_paths() {
 fn unsupported_names_remain_lossless_errors_and_recover_later_items() {
     for source in [
         r#"{ "${x}" = 1; }"#,
-        r#"s."${"x"}""#,
+        r#"s."${}""#,
         r#"{ inherit (s) "${x}"; }"#,
         r#"{ ${"x"} = 1; }"#,
         "{ ''x'' = 1; }",
@@ -184,7 +184,7 @@ fn unsupported_names_remain_lossless_errors_and_recover_later_items() {
     }
     for native in [
         r#"{ "${x}" = 1; }"#,
-        r#"s."${"x"}""#,
+        r#"s."${}""#,
         r#"{ inherit (s) "${x}"; }"#,
         "{ ''x'' = 1; }",
         "s.''x''",

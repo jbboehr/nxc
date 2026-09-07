@@ -3,7 +3,7 @@
 use super::{NxcLanguage, SyntaxKind as K, SyntaxNode};
 use crate::{
     Diagnostic, MAX_DEPTH,
-    ir::{self, BinaryOp, Binding, Expr, Formal, Pattern, StringPart},
+    ir::{self, AttrName, BinaryOp, Binding, Expr, Formal, Pattern, StringPart},
 };
 use rowan::ast::AstNode;
 
@@ -119,7 +119,7 @@ impl Expression {
             }),
             K::SelectExpr => Ok(Expr::Select {
                 value: Box::new(child()?),
-                path: lower_path(&self.0)?,
+                path: lower_selection_path(&self.0, depth)?,
                 default: children
                     .next()
                     .map(|expr| expr.lower(depth + 1).map(Box::new))
@@ -246,6 +246,26 @@ fn lower_string(node: &SyntaxNode, depth: usize) -> Result<Expr, Diagnostic> {
         });
     }
     crate::string::lower(parts, indented).map_err(error)
+}
+
+fn lower_selection_path(node: &SyntaxNode, depth: usize) -> Result<Vec<AttrName>, Diagnostic> {
+    node.children()
+        .filter(|node| node.kind() == K::AttrName)
+        .map(|name| {
+            if let Some(key) = name.children().find_map(Expression::cast) {
+                if name.first_token().is_some_and(|token| token.text() == "''") {
+                    let range = name.text_range();
+                    return Err(Diagnostic::new(
+                        usize::from(range.start())..usize::from(range.end()),
+                        "attribute names require double quotes",
+                    ));
+                }
+                Ok(AttrName::Dynamic(Box::new(key.lower(depth + 1)?)))
+            } else {
+                lower_attr(&name).map(AttrName::Static)
+            }
+        })
+        .collect()
 }
 
 fn lower_path(node: &SyntaxNode) -> Result<Vec<String>, Diagnostic> {

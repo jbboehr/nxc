@@ -2,7 +2,7 @@
 
 use crate::{
     Diagnostic, MAX_DEPTH, MAX_SOURCE_BYTES, MAX_TOKENS,
-    ir::{self, BinaryOp, Binding, Expr, Formal, Pattern, StringPart},
+    ir::{self, AttrName, BinaryOp, Binding, Expr, Formal, Pattern, StringPart},
 };
 use rnix::{
     SyntaxKind as K,
@@ -259,7 +259,7 @@ fn lower(mut node: ast::Expr, depth: usize) -> Result<Expr, Diagnostic> {
         }),
         ast::Expr::Select(select) => Ok(Expr::Select {
             value: Box::new(child(select.expr())?),
-            path: lower_path(select.attrpath())?,
+            path: lower_selection_path(select.attrpath(), depth)?,
             default: select
                 .default_expr()
                 .map(|value| {
@@ -452,6 +452,48 @@ fn lower_list(list: ast::List, depth: usize) -> Result<Expr, Diagnostic> {
             })
             .collect::<Result<_, _>>()?,
     ))
+}
+
+fn lower_selection_path(
+    path: Option<ast::Attrpath>,
+    depth: usize,
+) -> Result<Vec<AttrName>, Diagnostic> {
+    path.ok_or_else(|| Diagnostic::new(0..0, "missing native attribute path"))?
+        .attrs()
+        .map(|attr| {
+            let range = syntax(&attr).text_range();
+            let error = |message| {
+                Diagnostic::new(
+                    usize::from(range.start())..usize::from(range.end()),
+                    message,
+                )
+            };
+            match attr {
+                ast::Attr::Dynamic(key) => Ok(AttrName::Dynamic(Box::new(lower(
+                    key.expr()
+                        .ok_or_else(|| error("missing dynamic key expression"))?,
+                    depth + 1,
+                )?))),
+                ast::Attr::Str(string)
+                    if string
+                        .parts()
+                        .any(|part| matches!(part, InterpolPart::Interpolation(_))) =>
+                {
+                    if !syntax(&string)
+                        .first_token()
+                        .is_some_and(|token| token.text() == "\"")
+                    {
+                        return Err(error("attribute names require double quotes"));
+                    }
+                    Ok(AttrName::Dynamic(Box::new(lower_string(
+                        string,
+                        depth + 1,
+                    )?)))
+                }
+                attr => lower_attr(attr).map(AttrName::Static),
+            }
+        })
+        .collect()
 }
 
 fn lower_attr(attr: ast::Attr) -> Result<String, Diagnostic> {

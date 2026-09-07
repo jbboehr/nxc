@@ -108,6 +108,7 @@ pub enum SyntaxKind {
     StringStart,
     StringContent,
     StringEnd,
+    #[token("${")]
     InterpolationStart,
     InterpolationEnd,
     ErrorToken,

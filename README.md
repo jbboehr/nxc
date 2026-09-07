@@ -107,6 +107,22 @@ the decoded name is a valid bare attribute name. Binding conflicts are rejected;
 literal nested attrsets merge according to Nix's rules. Values remain lazy, and
 `inherit x` retains its enclosing-scope lookup even inside a recursive attrset.
 
+Selections also accept dynamic keys, using the same syntax as Nix:
+
+```nix
+let {
+    name = "x";
+    values = { x.answer = 42; "prefix-x" = 7; };
+    yield [values.${name}.answer, values."prefix-${name}" or 0];
+}
+```
+
+`${expression}` requires a string key without store-path context. Quoted
+interpolation performs Nix's usual string coercion first. Conversion preserves
+this distinction and may print `values."${name}"` as `values.${"${name}"}`.
+The `or` default applies to the whole path; a missing component skips any
+remaining key expressions. Conversion does not evaluate keys or defaults.
+
 Local bindings use `let { ... yield ...; }`:
 
 ```nix
@@ -261,7 +277,7 @@ Native attrset updates (`//`) round-trip through the reserved internal form
 `__nxc_update(a, b)`. This is converter compatibility syntax; the public update
 syntax is still undecided. `//` remains a line comment in nxc.
 
-Dynamic attribute names (including quoted names with interpolation),
+Dynamic attribute bindings and inheritance names,
 attribute-existence tests (`?`), absolute paths,
 home-relative paths, search paths, and interpolated paths are not implemented yet.
 The older native `let { body = ...; }` syntax is also unsupported.

@@ -100,11 +100,20 @@ pub(crate) fn bindings(
 
 pub(crate) fn selection(
     value: &crate::ir::Expr,
-    path: &[String],
+    path: &[crate::ir::AttrName],
     default: Option<&crate::ir::Expr>,
     render: fn(&crate::ir::Expr) -> String,
 ) -> String {
-    let mut source = format!("(({}).{}", render(value), attribute_path(path));
+    use crate::ir::AttrName;
+    let path = path
+        .iter()
+        .map(|name| match name {
+            AttrName::Static(name) => attribute(name),
+            AttrName::Dynamic(key) => format!("${{{}}}", render(key)),
+        })
+        .collect::<Vec<_>>()
+        .join(".");
+    let mut source = format!("(({}).{path}", render(value));
     if let Some(default) = default {
         source.push_str(&format!(" or ({})", render(default)));
     }

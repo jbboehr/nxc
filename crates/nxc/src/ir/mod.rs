@@ -39,8 +39,8 @@ pub enum Expr {
     },
     Select {
         value: Box<Expr>,
-        /// Decoded static names; dots within a name are not path separators.
-        path: Vec<String>,
+        /// One ordered path, including unevaluated dynamic key expressions.
+        path: Vec<AttrName>,
         default: Option<Box<Expr>>,
     },
     Lambda {
@@ -58,6 +58,27 @@ pub enum Expr {
         left: Box<Expr>,
         right: Box<Expr>,
     },
+}
+
+/// A selection key. Quoted interpolation retains its `Expr::String` wrapper
+/// because Nix coerces string interpolations but requires direct keys to be strings.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum AttrName {
+    /// Decoded text; dots within a name are not path separators.
+    Static(String),
+    Dynamic(Box<Expr>),
+}
+
+impl From<String> for AttrName {
+    fn from(name: String) -> Self {
+        Self::Static(name)
+    }
+}
+
+impl From<&str> for AttrName {
+    fn from(name: &str) -> Self {
+        Self::Static(name.into())
+    }
 }
 
 /// Interpolations retain their expression and Nix's string coercion/context.
@@ -312,7 +333,15 @@ impl Expr {
                     path,
                     default,
                 } => {
-                    validate_path(path, &mut count, &mut literal_bytes).map_err(error)?;
+                    validate_path_length(path.len(), &mut count).map_err(error)?;
+                    for name in path {
+                        match name {
+                            AttrName::Static(name) => {
+                                validate_attr_name(name, &mut literal_bytes).map_err(error)?;
+                            }
+                            AttrName::Dynamic(key) => pending.push((key, depth + 1)),
+                        }
+                    }
                     pending.push((value, depth + 1));
                     if let Some(default) = default {
                         pending.push((default, depth + 1));
@@ -393,16 +422,21 @@ fn validate_path(
     count: &mut usize,
     literal_bytes: &mut usize,
 ) -> Result<(), &'static str> {
-    if path.is_empty() {
-        return Err("attribute path must not be empty");
-    }
-    if path.len() > crate::MAX_DEPTH || path.len() > crate::MAX_TOKENS - *count {
-        return Err("attribute path exceeds the node or nesting limit");
-    }
-    *count += path.len();
+    validate_path_length(path.len(), count)?;
     for name in path {
         validate_attr_name(name, literal_bytes)?;
     }
+    Ok(())
+}
+
+fn validate_path_length(len: usize, count: &mut usize) -> Result<(), &'static str> {
+    if len == 0 {
+        return Err("attribute path must not be empty");
+    }
+    if len > crate::MAX_DEPTH || len > crate::MAX_TOKENS - *count {
+        return Err("attribute path exceeds the node or nesting limit");
+    }
+    *count += len;
     Ok(())
 }
 

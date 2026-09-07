@@ -152,6 +152,18 @@ pub(super) fn parse(tokens: &[Token], source_len: usize) -> (Option<Node>, Vec<D
             .at_least(1)
             .collect::<Vec<_>>()
             .map_with(|names, e| Node::new(K::AttrPath, e.span(), names));
+        let selection_path = choice((
+            attr_name,
+            expr.clone()
+                .delimited_by(just(K::InterpolationStart), just(K::InterpolationEnd))
+                .map_with(|key, e| Node::new(K::AttrName, e.span(), vec![key])),
+            string
+                .clone()
+                .map_with(|key, e| Node::new(K::AttrName, e.span(), vec![key])),
+        ))
+        .separated_by(just(K::Dot))
+        .at_least(1)
+        .collect::<Vec<_>>();
         let assignment = path
             .then_ignore(just(K::Assign))
             .then(expr.clone())
@@ -308,6 +320,7 @@ pub(super) fn parse(tokens: &[Token], source_len: usize) -> (Option<Node>, Vec<D
                     K::AndAnd,
                     K::OrOr,
                     K::Or,
+                    K::Dot,
                 ])
                 .not(),
             )
@@ -395,13 +408,16 @@ pub(super) fn parse(tokens: &[Token], source_len: usize) -> (Option<Node>, Vec<D
             atom.clone()
                 .then(
                     just(K::Dot)
-                        .ignore_then(path)
+                        .ignore_then(selection_path.clone())
                         .then(just(K::Or).ignore_then(simple).or_not())
                         .or_not(),
                 )
                 .map_with(|(value, selection), e| {
                     if let Some((path, default)) = selection {
-                        let mut children = vec![value, path];
+                        // Keep keys directly under the selection so dynamic
+                        // key wrappers fit the existing CST depth bound.
+                        let mut children = vec![value];
+                        children.extend(path);
                         children.extend(default);
                         Node::new(K::SelectExpr, e.span(), children)
                     } else {
@@ -410,7 +426,7 @@ pub(super) fn parse(tokens: &[Token], source_len: usize) -> (Option<Node>, Vec<D
                 })
         });
         let selection = just(K::Dot)
-            .ignore_then(path)
+            .ignore_then(selection_path)
             .then(just(K::Or).ignore_then(simple).or_not());
         let operators = atom.pratt((
             postfix(10, arguments, |function, arguments: Vec<Node>, e| {
@@ -421,8 +437,9 @@ pub(super) fn parse(tokens: &[Token], source_len: usize) -> (Option<Node>, Vec<D
             postfix(
                 10,
                 selection,
-                |value, (path, default): (Node, Option<Node>), e| {
-                    let mut children = vec![value, path];
+                |value, (path, default): (Vec<Node>, Option<Node>), e| {
+                    let mut children = vec![value];
+                    children.extend(path);
                     children.extend(default);
                     Node::new(K::SelectExpr, e.span(), children)
                 },
