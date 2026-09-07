@@ -22,7 +22,8 @@ comparison and Boolean operators, calls, and simple/attribute-pattern lambdas in
 both conversion directions.
 It also includes static attrsets, dotted bindings, inheritance, and selections
 with defaults, lists, `let`, `with`, `if`, and `assert` expressions,
-double-quoted/indented strings, and interpolation. `nxc` provides `check`, `to-nix`,
+double-quoted/indented strings, interpolation, and native attrset updates through
+a reserved compatibility form. `nxc` provides `check`, `to-nix`,
 and `from-nix`.
 `xtask` provides the corpus runner described in
 [the handoff](docs/HANDOFF.md). All crates currently disable publishing.
@@ -49,6 +50,7 @@ round trips, CLI output and error handling, and resource limits. Proptest checks
 arbitrary UTF-8 input and generated semantic expressions. The native Nix oracle
 checks generated syntax, precedence, currying, parameter scope, lazy defaults,
 short-circuit Boolean operators, comparison values and lazy collection equality,
+shallow attrset updates, operand forcing and lazy overridden attributes,
 argument validation, recursive set merges, local binding and `with` scope, inheritance,
 lazy conditional branches, assertion failures and evaluation order,
 list boundaries/laziness, string coercion/context,
@@ -166,6 +168,17 @@ operator operands before removing parentheses; rnix accepts those operands
 although Nix rejects them. Conversely, rnix rejects some valid native prefix
 combinations such as `1 + !true` and `-!true`. These remain explicit parse errors;
 parenthesized operands import normally, and generated output always groups them.
+
+Native `a // b` lowers to `BinaryOp::Update`. The nxc emitter uses the reserved
+compatibility form `__nxc_update(a, b)`, parsed as a special form requiring exactly
+two expressions, with an optional trailing comma. Native output retains the
+parenthesized binary operation, preserving right-associative source grouping,
+shallow overrides, operand forcing, and the scopes of unevaluated attributes.
+No attributes are merged or evaluated during conversion. The `__nxc_` prefix
+remains forbidden for variables and parameter names in both dialects. Static
+attribute names such as `s.__nxc_update` still work; a qualified attribute call is
+an ordinary function call. The public update spelling is undecided, and `//`
+remains a line comment in nxc.
 
 Lambda IR retains the single parameter, required fields, unevaluated defaults,
 ellipsis, and optional whole-argument binding. Parameter spellings (`fn`,

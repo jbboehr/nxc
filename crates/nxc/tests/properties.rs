@@ -117,6 +117,7 @@ fn expressions() -> impl Strategy<Value = Expr> {
                     BinaryOp::GreaterOrEqual,
                     BinaryOp::And,
                     BinaryOp::Or,
+                    BinaryOp::Update,
                 ]),
                 inner.clone(),
                 inner

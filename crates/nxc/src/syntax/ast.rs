@@ -102,6 +102,11 @@ impl Expression {
                 condition: Box::new(child()?),
                 body: Box::new(child()?),
             }),
+            K::UpdateExpr => Ok(Expr::Binary {
+                op: BinaryOp::Update,
+                left: Box::new(child()?),
+                right: Box::new(child()?),
+            }),
             K::IfExpr => Ok(Expr::If {
                 condition: Box::new(child()?),
                 then_branch: Box::new(child()?),

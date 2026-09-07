@@ -127,7 +127,7 @@ pub(super) fn parse(tokens: &[Token], source_len: usize) -> (Option<Node>, Vec<D
                 Node::new(K::LambdaExpr, e.span(), vec![parameter, body])
             });
 
-        let attr_name = one_of([K::Ident, K::Or, K::Fn, K::Yield])
+        let attr_name = one_of([K::Ident, K::Or, K::Fn, K::Yield, K::UpdateIntrinsic])
             .map_with(|_, e| Node::new(K::AttrName, e.span(), vec![]));
         let path = attr_name
             .separated_by(just(K::Dot))
@@ -346,6 +346,15 @@ pub(super) fn parse(tokens: &[Token], source_len: usize) -> (Option<Node>, Vec<D
                     Ok(Node::new(K::AssertExpr, span, children))
                 });
 
+        let update = just(K::UpdateIntrinsic)
+            .ignore_then(arguments.clone())
+            .try_map(|children, span| {
+                if children.len() != 2 {
+                    return Err(Rich::custom(span, "__nxc_update requires two operands"));
+                }
+                Ok(Node::new(K::UpdateExpr, span, children))
+            });
+
         let atom = choice((
             integer,
             variable,
@@ -354,6 +363,7 @@ pub(super) fn parse(tokens: &[Token], source_len: usize) -> (Option<Node>, Vec<D
             let_expr,
             with_expr,
             assert_expr,
+            update,
             string,
             list,
         ))

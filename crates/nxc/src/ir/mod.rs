@@ -121,6 +121,7 @@ pub enum BinaryOp {
     GreaterOrEqual,
     And,
     Or,
+    Update,
 }
 
 impl BinaryOp {
@@ -138,6 +139,7 @@ impl BinaryOp {
             Self::GreaterOrEqual => ">=",
             Self::And => "&&",
             Self::Or => "||",
+            Self::Update => "//",
         }
     }
 }

@@ -2,7 +2,7 @@
 
 use crate::{
     Diagnostic, MAX_DEPTH, MAX_SOURCE_BYTES, MAX_TOKENS,
-    ir::Expr,
+    ir::{BinaryOp, Expr},
     syntax::{SyntaxKind as K, lexer},
 };
 
@@ -88,6 +88,11 @@ fn render(expr: &Expr) -> String {
         }
         Expr::Negate(value) => format!("(-{})", render(value)),
         Expr::Not(value) => format!("(!{})", render(value)),
+        Expr::Binary {
+            op: BinaryOp::Update,
+            left,
+            right,
+        } => format!("__nxc_update({}, {})", render(left), render(right)),
         Expr::Binary { op, left, right } => {
             format!("({} {} {})", render(left), op.spelling(), render(right))
         }

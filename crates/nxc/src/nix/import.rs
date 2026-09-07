@@ -290,6 +290,7 @@ fn lower(mut node: ast::Expr, depth: usize) -> Result<Expr, Diagnostic> {
                 Some(ast::BinOpKind::MoreOrEq) => BinaryOp::GreaterOrEqual,
                 Some(ast::BinOpKind::And) => BinaryOp::And,
                 Some(ast::BinOpKind::Or) => BinaryOp::Or,
+                Some(ast::BinOpKind::Update) => BinaryOp::Update,
                 _ => return Err(error("native Nix operator is not supported yet")),
             };
             Ok(Expr::Binary {

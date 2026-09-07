@@ -230,10 +230,14 @@ Integer literals range from `0` to `9223372036854775807`; negative values use un
 Attribute paths have at most 128 components, and dotted bindings count toward
 semantic nesting. Generated output must fit these limits as well.
 
+Native attrset updates (`//`) round-trip through the reserved internal form
+`__nxc_update(a, b)`. This is converter compatibility syntax; the public update
+syntax is still undecided. `//` remains a line comment in nxc.
+
 Quoted/dynamic attributes, attribute-existence tests (`?`), and paths are not
 implemented yet. The older native `let { body = ...; }` syntax is also unsupported.
-List concatenation (`++`), implication (`->`), and attrset update remain
-unsupported. Native import currently requires parentheses around `!` expressions
+List concatenation (`++`) and implication (`->`) remain unsupported.
+Native import currently requires parentheses around `!` expressions
 nested inside arithmetic, such as `-(!x)`.
 
 A complete conversion example:
