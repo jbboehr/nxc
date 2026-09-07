@@ -61,6 +61,8 @@ pub(super) fn parse(tokens: &[Token], source_len: usize) -> (Option<Node>, Vec<D
         let integer = just::<_, _, extra::Err<Rich<'_, K>>>(K::Integer)
             .map_with(|_, e| Node::new(K::IntegerExpr, e.span(), vec![]));
         let variable = just(K::Ident).map_with(|_, e| Node::new(K::VariableExpr, e.span(), vec![]));
+        let relative_path =
+            just(K::RelativePath).map_with(|_, e| Node::new(K::RelativePathExpr, e.span(), vec![]));
         let paren = expr
             .clone()
             .delimited_by(just(K::LParen), just(K::RParen))
@@ -370,6 +372,7 @@ pub(super) fn parse(tokens: &[Token], source_len: usize) -> (Option<Node>, Vec<D
         let atom = choice((
             integer,
             variable,
+            relative_path,
             paren,
             attrset,
             let_expr,

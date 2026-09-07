@@ -22,8 +22,8 @@ comparison and Boolean operators, calls, and simple/attribute-pattern lambdas in
 both conversion directions.
 It also includes static attrsets, dotted bindings, inheritance, and selections
 with defaults, lists and concatenation, `let`, `with`, `if`, and `assert` expressions,
-double-quoted/indented strings, interpolation, native implication normalization,
-and native attrset updates through a reserved compatibility form.
+double-quoted/indented strings, interpolation, literal relative paths, native
+implication normalization, and native attrset updates through a reserved compatibility form.
 `nxc` provides `check`, `to-nix`,
 and `from-nix`.
 `xtask` provides the corpus runner described in
@@ -121,9 +121,8 @@ Discovery errors abort before processing because the file list is incomplete.
 
 Native parse counts include the library's compatibility and resource preflight
 checks. Lowering is counted separately, so valid unsupported forms such as
-paths and attribute-existence tests are distinguishable from parse failures.
-Coverage is expected to be low until those syntax forms are implemented. Small temporary
-corpora in the xtask tests exercise reporting and failure handling; no nixpkgs
+interpolated paths and attribute-existence tests are distinguishable from parse
+failures. Small temporary corpora in the xtask tests exercise reporting and failure handling; no nixpkgs
 checkout is required by the test suite or vendored into this repository.
 
 ## License provenance
@@ -298,6 +297,20 @@ tracks the quote style in its iterative mode stack. Canonical output uses double
 quotes and escapes every literal dollar to preserve interpolation boundaries.
 String and interpolation delimiters count toward nesting limits in both paths.
 Quoted/dynamic attribute paths remain a later slice.
+
+`Expr::RelativePath` preserves literal relative path text without filesystem
+access, resolution, or normalization. Logos recognizes path-shaped text before
+arithmetic, including unprefixed forms such as `foo/bar` and `1/2`. Shared IR
+validation rejects nonliteral or nonrelative forms, trailing slashes, empty
+components, and paths beginning with `...` (rnix tokenizes the ellipsis before
+the path; spelling these as `./.../name` works in both frontends).
+Both emitters parenthesize paths so unary operators and selections cannot merge
+into the literal. Path text shares the aggregate literal-byte budget with strings.
+Native oracle tests cover path types, relative resolution, coercion, lazy imports,
+and path/division boundaries; CLI tests evaluate original and generated files
+in the same directory. Lexical behavior follows the native Nix
+[lexer](https://github.com/NixOS/nix/blob/2.34.8/src/libexpr/lexer.l).
+Absolute, home-relative, search, and interpolated paths remain later slices.
 
 `nix::parse` returns an owned `nix::Parsed` wrapper with a separate `lower()`
 operation, allowing the corpus runner to count parsing and lowering without

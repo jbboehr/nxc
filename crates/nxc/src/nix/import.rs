@@ -204,6 +204,11 @@ fn lower(mut node: ast::Expr, depth: usize) -> Result<Expr, Diagnostic> {
             ir::validate_name(&name).map_err(error)?;
             Ok(Expr::Variable(name))
         }
+        ast::Expr::PathRel(path) => {
+            let path = syntax(&path).text().to_string();
+            ir::validate_relative_path(&path).map_err(error)?;
+            Ok(Expr::RelativePath(path))
+        }
         ast::Expr::Literal(literal) => {
             let token = syntax(&literal)
                 .first_token()

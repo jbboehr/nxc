@@ -20,6 +20,11 @@ fn expressions() -> impl Strategy<Value = Expr> {
             })
         }),
         (0u64..100_000).prop_map(Expr::Integer),
+        (
+            prop::sample::select(vec!["./", "../", "dir/"]),
+            "[a-zA-Z0-9_+.-]{1,16}"
+        )
+            .prop_map(|(prefix, name)| Expr::RelativePath(format!("{prefix}{name}"))),
         prop::sample::select(vec!["f", "x", "g", "foo-bar'", "true", "false", "null"])
             .prop_map(|name| Expr::Variable(name.into())),
     ]

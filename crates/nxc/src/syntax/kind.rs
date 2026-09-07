@@ -17,8 +17,10 @@ pub enum SyntaxKind {
     Ident,
     #[regex(r"[0-9]+")]
     Integer,
-    // Recognize path-shaped text before arithmetic. Path lowering is a later slice.
-    #[regex(r"[A-Za-z0-9._+\-]*/[A-Za-z0-9._+\-][A-Za-z0-9._+\-/]*")]
+    // A slash within path-shaped text takes precedence over division.
+    #[regex(r"[A-Za-z0-9._+\-]+/[A-Za-z0-9._+\-][A-Za-z0-9._+\-/]*")]
+    RelativePath,
+    #[regex(r"/[A-Za-z0-9._+\-][A-Za-z0-9._+\-/]*")]
     #[regex(r"~/[A-Za-z0-9._+\-/]*")]
     UnsupportedPath,
     #[token("(")]
@@ -112,6 +114,7 @@ pub enum SyntaxKind {
     Root,
     IntegerExpr,
     VariableExpr,
+    RelativePathExpr,
     ParenExpr,
     CallExpr,
     NegateExpr,
@@ -166,6 +169,7 @@ impl SyntaxKind {
             self,
             Self::IntegerExpr
                 | Self::VariableExpr
+                | Self::RelativePathExpr
                 | Self::ParenExpr
                 | Self::CallExpr
                 | Self::NegateExpr
@@ -191,6 +195,7 @@ impl std::fmt::Display for SyntaxKind {
         let name = match self {
             Self::Ident => "identifier",
             Self::Integer => "integer",
+            Self::RelativePath => "relative path",
             Self::LParen => "'('",
             Self::RParen => "')'",
             Self::LBracket => "'['",
@@ -256,6 +261,7 @@ impl rowan::Language for NxcLanguage {
             BlockComment,
             Ident,
             Integer,
+            RelativePath,
             UnsupportedPath,
             LParen,
             RParen,
@@ -306,6 +312,7 @@ impl rowan::Language for NxcLanguage {
             Root,
             IntegerExpr,
             VariableExpr,
+            RelativePathExpr,
             ParenExpr,
             CallExpr,
             NegateExpr,

@@ -91,7 +91,7 @@ pub fn parse(source: &str) -> Parse {
             let text = &source[token.span.clone()];
             let message = match token.kind {
                 SyntaxKind::ErrorToken => Some("invalid or unsupported token"),
-                SyntaxKind::UnsupportedPath => Some("path expressions are not supported yet"),
+                SyntaxKind::UnsupportedPath => Some("this path form is not supported yet"),
                 SyntaxKind::Integer if text.parse::<i64>().is_err() => {
                     Some("integer literal exceeds the Nix signed 64-bit range")
                 }

@@ -76,6 +76,11 @@ impl Expression {
                 ir::validate_name(&name).map_err(error)?;
                 Ok(Expr::Variable(name))
             }
+            K::RelativePathExpr => {
+                let path = self.0.text().to_string();
+                ir::validate_relative_path(&path).map_err(error)?;
+                Ok(Expr::RelativePath(path))
+            }
             K::ListExpr => Ok(Expr::List(
                 children
                     .map(|item| item.lower(depth + 1))

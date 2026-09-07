@@ -20,6 +20,62 @@ fn balanced_sum(leaves: usize) -> String {
 }
 
 #[test]
+fn relative_paths_keep_file_based_imports_and_do_not_read_targets_during_conversion() {
+    let dir = TempDir::new().unwrap();
+    let input = dir.path().join("input.nix");
+    let converted = dir.path().join("converted.nxc");
+    let output = dir.path().join("output.nix");
+    let value = dir.path().join("value.nix");
+    let source = "let value = import ./sub/../value.nix; in assert builtins.isPath ../missing.nix; if true then value else import ../missing.nix";
+    fs::write(&input, source).unwrap();
+    // Conversion succeeds before even the selected import's target exists.
+    for (command, from, to) in [
+        ("from-nix", &input, &converted),
+        ("to-nix", &converted, &output),
+    ] {
+        let result = cli(&[
+            command.as_ref(),
+            from.as_os_str(),
+            "-o".as_ref(),
+            to.as_os_str(),
+        ]);
+        assert!(result.status.success(), "{command}: {result:?}");
+        assert!(result.stdout.is_empty());
+        let generated = fs::read_to_string(to).unwrap();
+        assert!(generated.contains("./sub/../value.nix"));
+        assert!(generated.contains("../missing.nix"));
+    }
+    assert_eq!(fs::read_to_string(&input).unwrap(), source);
+    assert!(!value.exists());
+    fs::create_dir(dir.path().join("sub")).unwrap();
+    fs::write(&value, "42").unwrap();
+
+    match Command::new("nix-instantiate").arg("--version").output() {
+        Ok(result) => assert!(result.status.success()),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            eprintln!("skipping native Nix oracle: nix-instantiate is unavailable");
+            return;
+        }
+        Err(error) => panic!("cannot start Nix: {error}"),
+    }
+    for path in [&input, &output] {
+        let result = Command::new("nix-instantiate")
+            .args(["--store", "dummy://", "--eval", "--strict", "--json"])
+            .arg(path)
+            .output()
+            .unwrap();
+        assert!(
+            result.status.success(),
+            "{}: {}",
+            path.display(),
+            String::from_utf8_lossy(&result.stderr)
+        );
+        assert_eq!(String::from_utf8(result.stdout).unwrap().trim(), "42");
+    }
+    assert_eq!(fs::read_to_string(&value).unwrap(), "42");
+}
+
+#[test]
 fn conversion_commands_write_stdout_and_named_output() {
     let dir = TempDir::new().unwrap();
     let input = dir.path().join("input.nxc");

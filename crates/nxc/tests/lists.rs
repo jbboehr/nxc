@@ -72,7 +72,7 @@ fn malformed_lists_are_lossless_errors() {
         "[1)]",
         "[1 +]",
         "[1, @, 2]",
-        "[./path]",
+        "[/path]",
         "[let x = 1; in x]",
     ] {
         let parsed = syntax::parse(source);

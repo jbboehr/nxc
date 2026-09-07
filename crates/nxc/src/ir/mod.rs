@@ -6,6 +6,8 @@ pub enum Expr {
     /// A nonnegative integer literal, at most `i64::MAX`. Negation is separate.
     Integer(u64),
     Variable(String),
+    /// A literal source-relative path, retaining its spelling without resolution.
+    RelativePath(String),
     /// Decoded parts, with no empty or adjacent literals. An empty vector is "".
     String(Vec<StringPart>),
     /// Ordered, unevaluated elements; nesting is preserved.
@@ -172,6 +174,25 @@ pub(crate) fn validate_name(name: &str) -> Result<(), &'static str> {
     Ok(())
 }
 
+pub(crate) fn validate_relative_path(path: &str) -> Result<(), &'static str> {
+    // rnix recognizes a leading ellipsis before checking for a longer path.
+    // Keep emitted literals readable by both frontends without rewriting them.
+    if path.starts_with("...") {
+        return Err("relative paths starting with '...' require a './' prefix");
+    }
+    if !path.contains('/')
+        || path.starts_with('/')
+        || path.ends_with('/')
+        || path.contains("//")
+        || !path
+            .bytes()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, b'.' | b'_' | b'-' | b'+' | b'/'))
+    {
+        return Err("expected a literal relative path with nonempty components");
+    }
+    Ok(())
+}
+
 impl Expr {
     /// Equality is already canonical for this subset; no evaluation or folding occurs.
     pub fn canonical(&self) -> &Self {
@@ -195,6 +216,13 @@ impl Expr {
                 }
                 Self::Integer(_) => {}
                 Self::Variable(name) => validate_name(name).map_err(error)?,
+                Self::RelativePath(path) => {
+                    if path.len() > crate::MAX_SOURCE_BYTES - literal_bytes {
+                        return Err(error("path literals exceed the source size limit"));
+                    }
+                    validate_relative_path(path).map_err(error)?;
+                    literal_bytes += path.len();
+                }
                 Self::List(items) => {
                     if items.len() > crate::MAX_TOKENS - count {
                         return Err(error("list elements exceed the node limit"));

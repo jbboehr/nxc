@@ -96,10 +96,10 @@ fn malformed_and_unsupported_nxc_is_rejected() {
         "__nxc_unknown(a,b)",
         "__curPos",
         "1.5",
-        "./foo",
+        "./foo/",
         "/foo",
-        "a/b",
-        "1/2",
+        "a/b/",
+        "1/2/",
         "x -> y",
         "x +++ y",
         "9223372036854775808",
@@ -116,7 +116,7 @@ fn unsupported_native_forms_are_never_guessed() {
         "f (",
         "1.5",
         "a ? b",
-        "./foo",
+        "./foo/",
         "a +++ b",
         "a ->> b",
         "fn",
@@ -178,7 +178,7 @@ fn native_whitespace_rejected_by_nix_is_not_accepted_by_the_adapter() {
 }
 
 #[test]
-fn lexical_boundaries_preserve_names_and_do_not_guess_paths() {
+fn lexical_boundaries_preserve_names_and_distinguish_paths_from_arithmetic() {
     for name in [
         "_", "a-", "a--b", "foo-bar'", "true", "false", "null", "__nxc",
     ] {
@@ -223,7 +223,7 @@ fn lexical_boundaries_preserve_names_and_do_not_guess_paths() {
             "accepted native keyword {keyword}"
         );
     }
-    for path in ["a/b", "1/2", "./x", "../x", "~/x", "/x", "a-b/c-d"] {
+    for path in ["~/x", "/x", "./x/", "../x//y"] {
         assert!(
             parse_nxc(path).is_err(),
             "guessed path {path} as arithmetic"

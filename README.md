@@ -11,7 +11,8 @@ The current subset supports identifiers, integer literals, parentheses,
 arithmetic, comparison and Boolean operators, curried function calls, and lambdas
 with simple or attribute-pattern parameters. Static attrsets and attribute
 selections, lists, `let`, `with`, `if`, and `assert` expressions, double-quoted and
-indented strings, and string interpolation are also supported.
+indented strings, string interpolation, and literal relative paths are also
+supported.
 
 For example, `f(1 + 2, x)` converts to native Nix equivalent to `f (1 + 2) x`.
 Conversion preserves the expression's structure and leaves evaluation to Nix.
@@ -29,9 +30,9 @@ Malformed and unsupported input produces a nonzero exit status with a source
 location. Conversions currently discard comments and reformat expressions.
 
 Identifiers retain Nix's hyphens and apostrophes: `a-b` is one identifier, while
-`a - b` is subtraction. Use spaces around `/` for division; path expressions are
-not supported yet. Comments may use `//`, `#`, or `/* ... */`, and calls may have
-a trailing comma. Calls require at least one argument.
+`a - b` is subtraction. Use spaces around `/` for division: `1 / 2` divides,
+while `1/2` is a relative path. Comments may use `//`, `#`, or `/* ... */`, and
+calls may have a trailing comma. Calls require at least one argument.
 
 Operators follow [Nix precedence](https://nix.dev/manual/nix/2.34/language/operators).
 Calls and selections bind more tightly than the following groups, listed from
@@ -234,6 +235,16 @@ control characters. Raw CR/CRLF is preserved in indented strings. Conversion
 currently emits double-quoted strings with the same value, interpolation,
 and string context; it does not retain the original quote style.
 
+Literal relative paths retain their spelling, including `./foo`, `../foo`,
+`foo/bar`, and `./a/../b`. They work in calls such as `import(./module.nix)`;
+conversion does not require the referenced file to exist. Evaluation resolves
+them relative to the generated Nix file, so keep generated files beside their
+input when existing relative references should address the same files.
+Generated paths are parenthesized to preserve token boundaries: `-./foo` is a
+path, whereas `-(./foo)` is negation. Paths cannot have trailing slashes or empty
+components. Paths starting with `...` require an explicit `./` prefix, such as
+`./.../foo`.
+
 Inputs are currently limited to 1 MiB, 16,384 non-trivia tokens, and 128 levels of
 parenthesis, brace, bracket, string, interpolation, or semantic-expression nesting.
 Integer literals range from `0` to `9223372036854775807`; negative values use unary `-`.
@@ -244,8 +255,9 @@ Native attrset updates (`//`) round-trip through the reserved internal form
 `__nxc_update(a, b)`. This is converter compatibility syntax; the public update
 syntax is still undecided. `//` remains a line comment in nxc.
 
-Quoted/dynamic attributes, attribute-existence tests (`?`), and paths are not
-implemented yet. The older native `let { body = ...; }` syntax is also unsupported.
+Quoted/dynamic attributes, attribute-existence tests (`?`), absolute paths,
+home-relative paths, search paths, and interpolated paths are not implemented yet.
+The older native `let { body = ...; }` syntax is also unsupported.
 Native import currently requires parentheses around `!` expressions
 nested inside arithmetic or concatenation, such as `-(!x)` or `a ++ (!b)`.
 
