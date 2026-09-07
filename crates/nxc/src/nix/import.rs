@@ -18,19 +18,44 @@ pub fn import(source: &str) -> Result<Expr, Vec<Diagnostic>> {
 /// A native syntax tree that passed parsing and compatibility/resource checks.
 #[derive(Debug, Clone)]
 pub struct Parsed {
-    root: ast::Root,
+    root: Option<ast::Root>,
     source_len: usize,
+}
+
+impl Drop for Parsed {
+    fn drop(&mut self) {
+        let Some(root) = self.root.take() else {
+            return;
+        };
+        // Native parsing can produce long, flat operator chains that lowering
+        // rejects for semantic depth. Rowan frees green children recursively;
+        // retain each node's children before releasing it to bound stack use.
+        let mut pending = vec![syntax(&root).green().into_owned()];
+        drop(root);
+        while let Some(node) = pending.pop() {
+            pending.extend(
+                node.children()
+                    .filter_map(|child| child.into_node())
+                    .map(ToOwned::to_owned),
+            );
+        }
+    }
 }
 
 impl Parsed {
     /// Adapt supported native forms to the semantic IR without reparsing.
     pub fn lower(&self) -> Result<Expr, Vec<Diagnostic>> {
-        let root = self.root.expr().ok_or_else(|| {
-            vec![Diagnostic::new(
-                0..self.source_len,
-                "missing native Nix expression",
-            )]
-        })?;
+        let root = self
+            .root
+            .as_ref()
+            .expect("native tree exists until drop")
+            .expr()
+            .ok_or_else(|| {
+                vec![Diagnostic::new(
+                    0..self.source_len,
+                    "missing native Nix expression",
+                )]
+            })?;
         let result = lower(root, 1).map_err(|e| vec![e])?;
         result.validate().map_err(|mut e| {
             e.span = 0..self.source_len;
@@ -45,28 +70,32 @@ impl Parsed {
 pub fn parse(source: &str) -> Result<Parsed, Vec<Diagnostic>> {
     check_source(source).map_err(|e| vec![e])?;
     let parsed = rnix::Root::parse(source);
-    if !parsed.errors().is_empty() {
-        return Err(parsed
-            .errors()
-            .iter()
-            .map(|e| {
-                use rnix::ParseError::*;
-                let span = match e {
-                    Unexpected(r)
-                    | UnexpectedExtra(r)
-                    | UnexpectedWanted(_, r, _)
-                    | UnexpectedDoubleBind(r)
-                    | DuplicatedArgs(r, _) => usize::from(r.start())..usize::from(r.end()),
-                    _ => source.len()..source.len(),
-                };
-                Diagnostic::new(span, format!("native Nix parse error: {e}"))
-            })
-            .collect());
-    }
-    Ok(Parsed {
-        root: parsed.tree(),
+    let root = Parsed {
+        root: Some(parsed.tree()),
         source_len: source.len(),
-    })
+    };
+    let errors: Vec<_> = parsed
+        .errors()
+        .iter()
+        .map(|e| {
+            use rnix::ParseError::*;
+            let span = match e {
+                Unexpected(r)
+                | UnexpectedExtra(r)
+                | UnexpectedWanted(_, r, _)
+                | UnexpectedDoubleBind(r)
+                | DuplicatedArgs(r, _) => usize::from(r.start())..usize::from(r.end()),
+                _ => source.len()..source.len(),
+            };
+            Diagnostic::new(span, format!("native Nix parse error: {e}"))
+        })
+        .collect();
+    // Release rnix's shared owner first so our iterative drop also covers errors.
+    drop(parsed);
+    if !errors.is_empty() {
+        return Err(errors);
+    }
+    Ok(root)
 }
 
 pub(super) fn check_source(source: &str) -> Result<(), Diagnostic> {
@@ -284,35 +313,56 @@ fn lower(mut node: ast::Expr, depth: usize) -> Result<Expr, Diagnostic> {
         ast::Expr::UnaryOp(unary) if unary.operator() == Some(ast::UnaryOpKind::Invert) => {
             Ok(Expr::Not(Box::new(operator_child(unary.expr())?)))
         }
-        ast::Expr::BinOp(binary) => {
-            let op = match binary.operator() {
-                Some(ast::BinOpKind::Add) => BinaryOp::Add,
-                Some(ast::BinOpKind::Sub) => BinaryOp::Subtract,
-                Some(ast::BinOpKind::Mul) => BinaryOp::Multiply,
-                Some(ast::BinOpKind::Div) => BinaryOp::Divide,
-                Some(ast::BinOpKind::Equal) => BinaryOp::Equal,
-                Some(ast::BinOpKind::NotEqual) => BinaryOp::NotEqual,
-                Some(ast::BinOpKind::Less) => BinaryOp::Less,
-                Some(ast::BinOpKind::LessOrEq) => BinaryOp::LessOrEqual,
-                Some(ast::BinOpKind::More) => BinaryOp::Greater,
-                Some(ast::BinOpKind::MoreOrEq) => BinaryOp::GreaterOrEqual,
-                Some(ast::BinOpKind::And) => BinaryOp::And,
-                Some(ast::BinOpKind::Or) => BinaryOp::Or,
-                Some(ast::BinOpKind::Update) => BinaryOp::Update,
-                Some(ast::BinOpKind::Concat) => BinaryOp::Concat,
-                _ => return Err(error("native Nix operator is not supported yet")),
-            };
-            Ok(Expr::Binary {
-                op,
-                left: Box::new(operator_child(binary.lhs())?),
-                right: Box::new(operator_child(binary.rhs())?),
-            })
-        }
+        ast::Expr::BinOp(binary) => lower_binary(binary, operator_child),
         other => Err(error(&format!(
             "native Nix form {:?} is not supported yet",
             syntax(&other).kind()
         ))),
     }
+}
+
+// Keep binary construction out of the recursive lower frame so adding an
+// operator does not increase stack usage for every nested expression kind.
+fn lower_binary(
+    binary: ast::BinOp,
+    operand: impl Fn(Option<ast::Expr>) -> Result<Expr, Diagnostic>,
+) -> Result<Expr, Diagnostic> {
+    let native_op = binary.operator();
+    let op = match native_op {
+        Some(ast::BinOpKind::Add) => BinaryOp::Add,
+        Some(ast::BinOpKind::Sub) => BinaryOp::Subtract,
+        Some(ast::BinOpKind::Mul) => BinaryOp::Multiply,
+        Some(ast::BinOpKind::Div) => BinaryOp::Divide,
+        Some(ast::BinOpKind::Equal) => BinaryOp::Equal,
+        Some(ast::BinOpKind::NotEqual) => BinaryOp::NotEqual,
+        Some(ast::BinOpKind::Less) => BinaryOp::Less,
+        Some(ast::BinOpKind::LessOrEq) => BinaryOp::LessOrEqual,
+        Some(ast::BinOpKind::More) => BinaryOp::Greater,
+        Some(ast::BinOpKind::MoreOrEq) => BinaryOp::GreaterOrEqual,
+        Some(ast::BinOpKind::And) => BinaryOp::And,
+        Some(ast::BinOpKind::Or | ast::BinOpKind::Implication) => BinaryOp::Or,
+        Some(ast::BinOpKind::Update) => BinaryOp::Update,
+        Some(ast::BinOpKind::Concat) => BinaryOp::Concat,
+        _ => {
+            let range = syntax(&binary).text_range();
+            return Err(Diagnostic::new(
+                usize::from(range.start())..usize::from(range.end()),
+                "native Nix operator is not supported yet",
+            ));
+        }
+    };
+    let left = operand(binary.lhs())?;
+    // Normalize before semantic equality; final IR validation counts the Not.
+    let left = if native_op == Some(ast::BinOpKind::Implication) {
+        Expr::Not(Box::new(left))
+    } else {
+        left
+    };
+    Ok(Expr::Binary {
+        op,
+        left: Box::new(left),
+        right: Box::new(operand(binary.rhs())?),
+    })
 }
 
 fn lower_bindings(node: &impl HasEntry, depth: usize) -> Result<Vec<Binding>, Diagnostic> {

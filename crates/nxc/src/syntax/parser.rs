@@ -17,6 +17,17 @@ pub(super) struct Node {
     pub children: Vec<Node>,
 }
 
+impl Drop for Node {
+    fn drop(&mut self) {
+        // Trees rejected by the depth check may still have MAX_TOKENS nodes in
+        // a chain. Detach children before dropping each node to avoid recursion.
+        let mut pending = std::mem::take(&mut self.children);
+        while let Some(mut node) = pending.pop() {
+            pending.append(&mut node.children);
+        }
+    }
+}
+
 impl Node {
     fn new(kind: K, span: SimpleSpan, children: Vec<Node>) -> Self {
         Self {
@@ -102,15 +113,15 @@ pub(super) fn parse(tokens: &[Token], source_len: usize) -> (Option<Node>, Vec<D
         let pattern = choice((
             prefix_bind
                 .then(attrs.clone())
-                .map_with(|(bind, attrs), e| {
+                .map_with(|(bind, mut attrs), e| {
                     let mut children = vec![bind];
-                    children.extend(attrs.children);
+                    children.append(&mut attrs.children);
                     Node::new(K::AttrPattern, e.span(), children)
                 }),
             attrs
                 .then(suffix_bind.or_not())
-                .map_with(|(attrs, bind), e| {
-                    let mut children = attrs.children;
+                .map_with(|(mut attrs, bind), e| {
+                    let mut children = std::mem::take(&mut attrs.children);
                     children.extend(bind);
                     Node::new(K::AttrPattern, e.span(), children)
                 }),

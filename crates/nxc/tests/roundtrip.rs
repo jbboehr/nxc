@@ -118,7 +118,7 @@ fn unsupported_native_forms_are_never_guessed() {
         "a ? b",
         "./foo",
         "a +++ b",
-        "a -> b",
+        "a ->> b",
         "fn",
         "yield",
         "__nxc_update",

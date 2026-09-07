@@ -177,16 +177,17 @@ fn with_contexts_and_bodies_obey_depth_and_token_limits() {
     assert!(nix::import(&format!("with ({native}); 1")).is_err());
 
     let count = (MAX_TOKENS - 2) / 7;
-    let source = format!("[{}]", "with({}, 1) ".repeat(count));
-    let native = format!("[{}]", "(with {}; 1) ".repeat(count));
+    let padding = "1 ".repeat((MAX_TOKENS - 2) % 7);
+    let source = format!("[{}{padding}]", "with({}, 1) ".repeat(count));
+    let native = format!("[{}{padding}]", "(with {}; 1) ".repeat(count));
     let ir = parse_nxc(&source).unwrap();
     assert_eq!(nix::import(&native).unwrap(), ir);
     // Explicit output commas can exceed the budget even for accepted input.
     assert!(emit::nxc(&ir).is_err());
     assert!(nix::emit(&ir).is_ok());
     for source in [
-        format!("[{}1]", "with({}, 1) ".repeat(count)),
-        format!("[{}1]", "(with {}; 1) ".repeat(count)),
+        format!("[{}{padding}1]", "with({}, 1) ".repeat(count)),
+        format!("[{}{padding}1]", "(with {}; 1) ".repeat(count)),
     ] {
         assert!(parse_nxc(&source).is_err());
         assert!(nix::import(&source).is_err());

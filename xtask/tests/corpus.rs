@@ -153,8 +153,12 @@ fn emission_limit_failure_is_distinct_from_parse_or_lowering_failure() {
         format!("({} + {})", sum(half), sum(leaves - half))
     }
     let dir = TempDir::new().unwrap();
-    // Exactly 1,024 input tokens; canonical parentheses expand past the limit.
-    fs::write(dir.path().join("large.nix"), format!("---{}", sum(256))).unwrap();
+    // Exactly MAX_TOKENS input tokens; canonical parentheses expand past the limit.
+    fs::write(
+        dir.path().join("large.nix"),
+        format!("---{}", sum(nxc::MAX_TOKENS / 4)),
+    )
+    .unwrap();
     let output = corpus(dir.path(), &[]);
     assert_eq!(output.status.code(), Some(1));
     let summary = String::from_utf8(output.stdout).unwrap();

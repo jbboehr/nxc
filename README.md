@@ -63,6 +63,11 @@ collection comparisons, and evaluation failures to Nix. For example:
 assert(enabled && count > 0, packages)
 ```
 
+Native implication `a -> b` imports as `(!a) || b`, preserving the original
+grouping and skipping `b` when `a` is false. Use `!` and `||` in nxc; `->` is
+reserved for future type syntax. In native input, separate an identifier from
+`->`: `a->b` means `a- > b` because identifiers can end in a hyphen.
+
 Lambdas use `=>`. The forms `x => x + 1`, `(x) => x + 1`, and
 `fn(x) => x + 1` all convert to native `x: x + 1`. Multiple arguments use nested
 lambdas: `(x => y => x + y)(1, 2)` evaluates to `3` in Nix. Parenthesize a
@@ -229,7 +234,7 @@ control characters. Raw CR/CRLF is preserved in indented strings. Conversion
 currently emits double-quoted strings with the same value, interpolation,
 and string context; it does not retain the original quote style.
 
-Inputs are currently limited to 1 MiB, 1,024 non-trivia tokens, and 128 levels of
+Inputs are currently limited to 1 MiB, 16,384 non-trivia tokens, and 128 levels of
 parenthesis, brace, bracket, string, interpolation, or semantic-expression nesting.
 Integer literals range from `0` to `9223372036854775807`; negative values use unary `-`.
 Attribute paths have at most 128 components, and dotted bindings count toward
@@ -241,7 +246,6 @@ syntax is still undecided. `//` remains a line comment in nxc.
 
 Quoted/dynamic attributes, attribute-existence tests (`?`), and paths are not
 implemented yet. The older native `let { body = ...; }` syntax is also unsupported.
-Implication (`->`) remains unsupported.
 Native import currently requires parentheses around `!` expressions
 nested inside arithmetic or concatenation, such as `-(!x)` or `a ++ (!b)`.
 

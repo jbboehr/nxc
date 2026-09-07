@@ -22,8 +22,9 @@ comparison and Boolean operators, calls, and simple/attribute-pattern lambdas in
 both conversion directions.
 It also includes static attrsets, dotted bindings, inheritance, and selections
 with defaults, lists and concatenation, `let`, `with`, `if`, and `assert` expressions,
-double-quoted/indented strings, interpolation, and native attrset updates through
-a reserved compatibility form. `nxc` provides `check`, `to-nix`,
+double-quoted/indented strings, interpolation, native implication normalization,
+and native attrset updates through a reserved compatibility form.
+`nxc` provides `check`, `to-nix`,
 and `from-nix`.
 `xtask` provides the corpus runner described in
 [the handoff](docs/HANDOFF.md). All crates currently disable publishing.
@@ -49,7 +50,8 @@ Tests cover source reconstruction, malformed input, argument recovery, semantic
 round trips, CLI output and error handling, and resource limits. Proptest checks
 arbitrary UTF-8 input and generated semantic expressions. The native Nix oracle
 checks generated syntax, precedence, currying, parameter scope, lazy defaults,
-short-circuit Boolean operators, comparison values and lazy collection equality,
+short-circuit Boolean operators, implication normalization, comparison values
+and lazy collection equality,
 shallow attrset updates, operand forcing and lazy overridden attributes,
 argument validation, recursive set merges, local binding and `with` scope, inheritance,
 lazy conditional branches, assertion failures and evaluation order,
@@ -169,6 +171,17 @@ those forms although Nix rejects them. Conversely, rnix rejects some valid nativ
 prefix combinations such as `1 + !true`, `-!true`, and `a ++ !b`. These remain
 explicit parse errors; parenthesized operands import normally, and generated
 output always groups them.
+
+Native `a -> b` lowers directly to `Or(Not(a), b)` using the existing IR
+variants. Both emitters retain that normalized form, so `canonical()` needs no
+additional rewrite. Operand order, native right-associative grouping, type
+errors, and short-circuit evaluation are preserved without folding or evaluating
+either operand. Both operands pass the native grammar checks before lowering
+removes parentheses. Final IR validation counts the added negation against node
+and depth limits; emitters also count all added output tokens. The nxc grammar
+keeps `->` reserved for future type syntax.
+Binary construction lives in a separate helper to keep its temporaries out of
+the recursive importer frame, preserving support for deeply nested expressions.
 
 `BinaryOp::Concat` retains both operands and literal list boundaries without
 folding or flattening. Both emitters parenthesize `++` operations. The nxc parser
@@ -298,9 +311,13 @@ neither resolved nor rewritten. Reserved variable names, `__curPos`, and
 `__nxc_*` intrinsics are rejected in expression positions until their semantics
 are implemented.
 
-The limits in `lib.rs` are intentionally conservative for this slice. Both
-parsers reject excessive source size, token count, or nesting, and emitters
+The limits in `lib.rs` allow 1 MiB of source, 16,384 non-trivia tokens or semantic
+nodes, and 128 levels of nesting. Both parsers reject excessive source size,
+token count, or nesting, and emitters
 reject output that would exceed the corresponding parser's size/token limits.
 Token and nesting limits are checked before collecting lexical diagnostics;
 over-budget nxc input produces one limit diagnostic and a flat lossless CST.
+Temporary nxc grammar trees and native parsed trees are freed iteratively:
+operator chains can exceed the semantic depth limit before lowering rejects them.
+This also covers native parse errors and cloned `nix::Parsed` values.
 Raise these bounds only with coverage for parser, CST, IR, and emitter depth.

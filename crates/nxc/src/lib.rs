@@ -8,9 +8,9 @@ pub mod nix;
 mod string;
 pub mod syntax;
 
-/// Conservative resource bounds for this first expression subset.
+/// Resource bounds shared by source parsing, IR validation, and emission.
 pub const MAX_SOURCE_BYTES: usize = 1024 * 1024;
-pub const MAX_TOKENS: usize = 1024;
+pub const MAX_TOKENS: usize = 16 * 1024;
 pub const MAX_DEPTH: usize = 128;
 
 use std::ops::Range;

@@ -246,9 +246,8 @@ fn let_nesting_and_binding_counts_obey_resource_limits() {
     });
     let native =
         (0..MAX_DEPTH - 1).fold("1".to_owned(), |inner, _| format!("let a = {inner}; in a"));
-    // The nxc form reaches the token budget before this depth.
-    assert!(parse_nxc(&source).is_err());
-    assert!(nix::import(&native).is_ok());
+    roundtrip(&source, &native);
+    assert!(parse_nxc(&format!("let {{ a = {source}; yield a; }}")).is_err());
     assert!(nix::import(&format!("let a = {native}; in a")).is_err());
     let bindings = "inherit; ".repeat((MAX_TOKENS - 6) / 2);
     let source = format!("let {{ {bindings} yield 1; }}");

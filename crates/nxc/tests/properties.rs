@@ -168,6 +168,20 @@ proptest! {
         prop_assert_eq!(emit::nxc(&from_nxc).unwrap(), source);
         prop_assert_eq!(nix::emit(&from_native).unwrap(), native);
     }
+
+    #[test]
+    fn generated_native_implications_normalize_consistently(left in expressions(), right in expressions()) {
+        let native = format!("({}) -> ({})", nix::emit(&left).unwrap(), nix::emit(&right).unwrap());
+        let expected = Expr::Binary {
+            op: BinaryOp::Or,
+            left: Box::new(Expr::Not(Box::new(left))),
+            right: Box::new(right),
+        };
+        let actual = nix::import(&native).unwrap();
+        prop_assert_eq!(actual.canonical(), expected.canonical());
+        prop_assert_eq!(parse_nxc(&emit::nxc(&actual).unwrap()).unwrap(), expected.clone());
+        prop_assert_eq!(nix::import(&nix::emit(&actual).unwrap()).unwrap(), expected);
+    }
 }
 
 #[test]

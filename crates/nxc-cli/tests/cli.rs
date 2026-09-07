@@ -127,9 +127,9 @@ fn emission_limit_errors_do_not_open_existing_destinations() {
     let dir = TempDir::new().unwrap();
     let input = dir.path().join("at-limit.expr");
     let output = dir.path().join("keep.expr");
-    // This source is accepted at exactly 1,024 tokens. Canonical emission wraps
+    // This source is accepted at exactly MAX_TOKENS. Canonical emission wraps
     // each negation, so conversion must report an output-limit error.
-    fs::write(&input, format!("---{}", balanced_sum(256))).unwrap();
+    fs::write(&input, format!("---{}", balanced_sum(nxc::MAX_TOKENS / 4))).unwrap();
 
     for command in ["to-nix", "from-nix"] {
         fs::write(&output, "keep me").unwrap();

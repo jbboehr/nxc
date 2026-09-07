@@ -25,6 +25,52 @@ fn balanced_expr(leaves: usize) -> Expr {
 }
 
 #[test]
+fn larger_native_files_roundtrip_through_both_generated_dialects() {
+    // 1,800 implications expand from 9,002 native tokens to 16,201 nxc tokens.
+    // This catches both the old input ceiling and output-only ceiling changes.
+    for items in [128, 1_800] {
+        let source = format!("[{}]", "(a -> b) ".repeat(items));
+        let expected = Expr::List(vec![
+            Expr::Binary {
+                op: BinaryOp::Or,
+                left: Box::new(Expr::Not(Box::new(Expr::Variable("a".into())))),
+                right: Box::new(Expr::Variable("b".into())),
+            };
+            items
+        ]);
+        let imported = nix::import(&source).unwrap();
+        assert_eq!(imported, expected);
+        let converted = emit::nxc(&imported).unwrap();
+        let reparsed = parse_nxc(&converted).unwrap();
+        assert_eq!(reparsed, expected);
+        let native = nix::emit(&reparsed).unwrap();
+        assert_eq!(nix::import(&native).unwrap(), expected);
+    }
+}
+
+#[test]
+fn deep_native_trees_can_be_lowered_rejected_and_dropped() {
+    let source = format!("{}a", "a -> ".repeat((MAX_TOKENS - 1) / 2));
+    let parsed = nix::parse(&source).unwrap();
+    let cloned = parsed.clone();
+    assert!(parsed.lower().is_err());
+    drop(parsed);
+    drop(cloned);
+    // Parse errors must also release their recovered native tree safely.
+    assert!(nix::parse(&format!("{source};")).is_err());
+}
+
+#[test]
+fn deep_nxc_trees_are_rejected_with_a_lossless_cst() {
+    for operator in ["+", "++"] {
+        let source = format!("{}a", format!("a {operator} ").repeat((MAX_TOKENS - 1) / 2));
+        let parsed = syntax::parse(&source);
+        assert_eq!(parsed.syntax().unwrap().to_string(), source);
+        assert!(parsed.lower().is_err());
+    }
+}
+
+#[test]
 fn exact_resource_limits_are_accepted_and_the_next_value_is_rejected() {
     let exact_size = format!("1{}", " ".repeat(MAX_SOURCE_BYTES - 1));
     assert_eq!(exact_size.len(), MAX_SOURCE_BYTES);
@@ -34,9 +80,9 @@ fn exact_resource_limits_are_accepted_and_the_next_value_is_rejected() {
     assert!(parse_nxc(&too_large).is_err());
     assert!(nix::import(&too_large).is_err());
 
-    // A 256-leaf fully parenthesized sum has 1,021 tokens. Three unary
+    // A fully parenthesized sum has four tokens per leaf minus three. Three unary
     // operators reach the token limit without creating a deep expression.
-    let at_token_limit = format!("---{}", balanced_sum(256));
+    let at_token_limit = format!("---{}", balanced_sum(MAX_TOKENS / 4));
     assert_eq!(
         syntax::lexer::lex(&at_token_limit)
             .iter()
@@ -88,7 +134,7 @@ fn emitted_output_honors_exact_size_and_token_limits() {
     assert!(emit::nxc(&over_size).is_err());
     assert!(nix::emit(&over_size).is_err());
 
-    let exact_tokens = Expr::Negate(Box::new(balanced_expr(256)));
+    let exact_tokens = Expr::Negate(Box::new(balanced_expr(MAX_TOKENS / 4)));
     for source in [
         emit::nxc(&exact_tokens).unwrap(),
         nix::emit(&exact_tokens).unwrap(),
