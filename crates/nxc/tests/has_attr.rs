@@ -105,7 +105,7 @@ fn malformed_existence_paths_are_lossless_and_recover_later_items() {
         r#"s ? "${}""#,
         "s ? ''a''",
         "s ? a or t",
-        "s ? ${~/absolute/path}",
+        "s ? ${./path${x}}",
         "s ? missing.${__curPos}",
     ] {
         let parsed = syntax::parse(source);

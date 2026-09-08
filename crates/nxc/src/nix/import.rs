@@ -220,6 +220,7 @@ fn lower_with_string_context(
         }
         ast::Expr::PathSearch(path) => lower_search_path(path),
         ast::Expr::PathAbs(path) => lower_absolute_path(path),
+        ast::Expr::PathHome(path) => lower_home_path(path),
         ast::Expr::Literal(literal) => {
             let token = syntax(&literal)
                 .first_token()
@@ -345,6 +346,18 @@ fn lower_with_string_context(
 }
 
 // Keep literal collection out of the recursive importer frame.
+fn lower_home_path(path: ast::PathHome) -> Result<Expr, Diagnostic> {
+    let range = syntax(&path).text_range();
+    let path = syntax(&path).text().to_string();
+    ir::validate_home_path(&path).map_err(|message| {
+        Diagnostic::new(
+            usize::from(range.start())..usize::from(range.end()),
+            message,
+        )
+    })?;
+    Ok(Expr::HomePath(path))
+}
+
 fn lower_absolute_path(path: ast::PathAbs) -> Result<Expr, Diagnostic> {
     let range = syntax(&path).text_range();
     let path = syntax(&path).text().to_string();

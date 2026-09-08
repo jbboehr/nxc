@@ -94,7 +94,7 @@ fn malformed_and_deferred_paths_fail_losslessly_and_recover() {
         "/é",
         "/a${x}",
         "/${x}",
-        "~/a",
+        "~/a/",
         "/a\0",
         "/a'b",
     ] {

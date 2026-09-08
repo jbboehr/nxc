@@ -27,7 +27,7 @@ pub enum SyntaxKind {
     #[regex(r"/[A-Za-z0-9._+\-][A-Za-z0-9._+\-/]*")]
     AbsolutePath,
     #[regex(r"~/[A-Za-z0-9._+\-/]*")]
-    UnsupportedPath,
+    HomePath,
     #[token("(")]
     LParen,
     #[token(")")]
@@ -126,6 +126,7 @@ pub enum SyntaxKind {
     VariableExpr,
     RelativePathExpr,
     AbsolutePathExpr,
+    HomePathExpr,
     SearchPathExpr,
     ParenExpr,
     CallExpr,
@@ -184,6 +185,7 @@ impl SyntaxKind {
                 | Self::VariableExpr
                 | Self::RelativePathExpr
                 | Self::AbsolutePathExpr
+                | Self::HomePathExpr
                 | Self::SearchPathExpr
                 | Self::ParenExpr
                 | Self::CallExpr
@@ -214,6 +216,7 @@ impl std::fmt::Display for SyntaxKind {
             Self::Float => "float",
             Self::RelativePath => "relative path",
             Self::AbsolutePath => "absolute path",
+            Self::HomePath => "home-relative path",
             Self::SearchPath => "search path",
             Self::LParen => "'('",
             Self::RParen => "')'",
@@ -284,7 +287,7 @@ impl rowan::Language for NxcLanguage {
             RelativePath,
             SearchPath,
             AbsolutePath,
-            UnsupportedPath,
+            HomePath,
             LParen,
             RParen,
             LBracket,
@@ -337,6 +340,7 @@ impl rowan::Language for NxcLanguage {
             VariableExpr,
             RelativePathExpr,
             AbsolutePathExpr,
+            HomePathExpr,
             SearchPathExpr,
             ParenExpr,
             CallExpr,

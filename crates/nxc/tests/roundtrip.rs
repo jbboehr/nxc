@@ -97,7 +97,7 @@ fn malformed_and_unsupported_nxc_is_rejected() {
         "__curPos",
         "1.5e+",
         "./foo/",
-        "~/foo",
+        "./path${x}",
         "a/b/",
         "1/2/",
         "x -> y",
@@ -115,7 +115,7 @@ fn unsupported_native_forms_are_never_guessed() {
         "",
         "f (",
         "1.5e+",
-        "~/unsupported/path",
+        "./path${x}",
         "./foo/",
         "a +++ b",
         "a ->> b",
@@ -225,7 +225,7 @@ fn lexical_boundaries_preserve_names_and_distinguish_paths_from_arithmetic() {
     }
     assert_eq!(parse_nxc("/x").unwrap(), Expr::AbsolutePath("/x".into()));
     assert_eq!(nix::import("/x").unwrap(), Expr::AbsolutePath("/x".into()));
-    for path in ["~/x", "/x/", "./x/", "../x//y"] {
+    for path in ["~/x/", "/x/", "./x/", "../x//y"] {
         assert!(
             parse_nxc(path).is_err(),
             "guessed path {path} as arithmetic"

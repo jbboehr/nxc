@@ -14,6 +14,8 @@ pub enum Expr {
     RelativePath(String),
     /// A literal absolute path, retaining its spelling without filesystem access.
     AbsolutePath(String),
+    /// A literal home-relative path, retaining `~/` without consulting the environment.
+    HomePath(String),
     /// An unresolved search-path expression, including its `<...>` delimiters.
     SearchPath(String),
     /// Decoded parts, with no empty or adjacent literals. An empty vector is "".
@@ -260,6 +262,13 @@ pub(crate) fn validate_absolute_path(path: &str) -> Result<(), &'static str> {
     Ok(())
 }
 
+pub(crate) fn validate_home_path(path: &str) -> Result<(), &'static str> {
+    if !path.strip_prefix("~/").is_some_and(valid_path_components) {
+        return Err("expected a literal home-relative path with nonempty components");
+    }
+    Ok(())
+}
+
 pub(crate) fn validate_relative_path(path: &str) -> Result<(), &'static str> {
     // rnix recognizes a leading ellipsis before checking for a longer path.
     // Keep emitted literals readable by both frontends without rewriting them.
@@ -321,6 +330,13 @@ impl Expr {
                         return Err(error("path literals exceed the source size limit"));
                     }
                     validate_absolute_path(path).map_err(error)?;
+                    literal_bytes += path.len();
+                }
+                Self::HomePath(path) => {
+                    if path.len() > crate::MAX_SOURCE_BYTES - literal_bytes {
+                        return Err(error("path literals exceed the source size limit"));
+                    }
+                    validate_home_path(path).map_err(error)?;
                     literal_bytes += path.len();
                 }
                 Self::List(items) => {

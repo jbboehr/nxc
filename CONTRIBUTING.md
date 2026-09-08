@@ -24,7 +24,8 @@ It also includes attrsets with static/dynamic names, dotted bindings,
 inheritance, static/dynamic selections with defaults, attribute-existence checks,
 lists and concatenation,
 `let`, `with`, `if`, and `assert` expressions,
-double-quoted/indented strings, interpolation, literal relative/absolute paths, search paths, native
+double-quoted/indented strings, interpolation, literal relative/absolute/home-relative paths,
+search paths, native
 implication normalization, and native attrset updates through a reserved compatibility form.
 `nxc` provides `check`, `to-nix`,
 and `from-nix`.
@@ -55,6 +56,7 @@ checks generated syntax, precedence, currying, parameter scope, lazy defaults,
 float type/value preservation, rounding and exact subnormal spellings,
 search-path lookup scope, lazy resolution, and search environment changes,
 absolute-path spelling, targets independent of file location, and path/division boundaries,
+home-path environment changes, verbatim dot components, and pure-mode rejection,
 short-circuit Boolean operators, implication normalization, comparison values
 and lazy collection equality,
 shallow attrset updates, operand forcing and lazy overridden attributes,
@@ -129,7 +131,7 @@ Discovery errors abort before processing because the file list is incomplete.
 
 Native parse counts include the library's compatibility and resource preflight
 checks. Lowering is counted separately, so valid unsupported forms such as
-interpolated paths and home-relative paths are distinguishable from parse
+interpolated paths are distinguishable from parse
 failures. Small temporary corpora in the xtask tests exercise reporting and failure handling; no nixpkgs
 checkout is required by the test suite or vendored into this repository.
 
@@ -363,10 +365,10 @@ Native oracle tests cover path types, relative resolution, coercion, lazy import
 and path/division boundaries; CLI tests evaluate original and generated files
 in the same directory. Lexical behavior follows the native Nix
 [lexer](https://github.com/NixOS/nix/blob/2.34.8/src/libexpr/lexer.l).
-Home-relative and interpolated paths remain later slices.
+Interpolated paths remain a later slice.
 
 `Expr::AbsolutePath` likewise retains literal text without resolving or normalizing
-it. All three path variants share component validation; absolute paths require
+it. All four path variants share component validation; absolute paths require
 one leading slash and relative paths reject it. Logos preserves path/division
 boundaries, including `/a/2` as one path, `1 /2` as native application, and
 `1 / 2` as division. Absolute-path lowering uses leaf helpers in both frontends
@@ -376,6 +378,20 @@ lossless error recovery, malformed and deferred path forms, public IR validation
 exact resource boundaries, native values and lazy failures. CLI tests create
 targets after conversion and evaluate from different file locations and working
 directories. Generated semantic-expression properties include absolute paths.
+
+`Expr::HomePath` retains the complete `~/...` literal without consulting `HOME`
+or accessing its target. Both frontends validate nonempty slash-separated components
+after `~/`, use leaf lowering helpers, and share existing resource ceilings. The
+lexer groups malformed trailing/empty components for lossless item recovery;
+bare `~`, named-user forms, and interpolated paths remain errors. Emitters retain
+the literal syntax in parentheses. Replacing it with an absolute path or a
+`getEnv` call would change native behavior: Nix 2.34.8 expands the home prefix at
+parse time, rejects it in pure mode even in unused branches, and preserves dot
+components in the resulting literal value. Native oracle tests protect these
+properties and later operations that normalize the path. CLI tests use subprocess
+environments to change the home directory after conversion and create targets only
+afterward. The parent process environment is unchanged. Native behavior follows
+the [parser](https://github.com/NixOS/nix/blob/2.34.8/src/libexpr/parser.y).
 
 `Expr::SearchPath` retains the full `<...>` spelling as an unevaluated lookup.
 Both frontends use shared validation for nonempty slash-separated components

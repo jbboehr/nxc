@@ -68,6 +68,8 @@ pub(super) fn parse(tokens: &[Token], source_len: usize) -> (Option<Node>, Vec<D
             just(K::SearchPath).map_with(|_, e| Node::new(K::SearchPathExpr, e.span(), vec![]));
         let absolute_path =
             just(K::AbsolutePath).map_with(|_, e| Node::new(K::AbsolutePathExpr, e.span(), vec![]));
+        let home_path =
+            just(K::HomePath).map_with(|_, e| Node::new(K::HomePathExpr, e.span(), vec![]));
         let paren = expr
             .clone()
             .delimited_by(just(K::LParen), just(K::RParen))
@@ -404,6 +406,7 @@ pub(super) fn parse(tokens: &[Token], source_len: usize) -> (Option<Node>, Vec<D
             relative_path,
             search_path,
             absolute_path,
+            home_path,
             paren,
             attrset,
             let_expr,

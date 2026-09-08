@@ -39,6 +39,8 @@ fn expressions() -> impl Strategy<Value = Expr> {
             .prop_map(|name| Expr::SearchPath(format!("<{name}>"))),
         "[a-zA-Z0-9_+.-]{1,16}(/[a-zA-Z0-9_+.-]{1,16}){0,3}"
             .prop_map(|name| Expr::AbsolutePath(format!("/{name}"))),
+        "[a-zA-Z0-9_+.-]{1,16}(/[a-zA-Z0-9_+.-]{1,16}){0,3}"
+            .prop_map(|name| Expr::HomePath(format!("~/{name}"))),
         prop::sample::select(vec!["f", "x", "g", "foo-bar'", "true", "false", "null"])
             .prop_map(|name| Expr::Variable(name.into())),
     ]

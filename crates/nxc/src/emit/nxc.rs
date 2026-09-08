@@ -47,9 +47,10 @@ fn render(expr: &Expr) -> String {
         Expr::Float(value) => value.to_string(),
         Expr::Variable(name) => name.clone(),
         // Protect path characters from surrounding unary operators and selections.
-        Expr::RelativePath(path) | Expr::AbsolutePath(path) | Expr::SearchPath(path) => {
-            format!("({path})")
-        }
+        Expr::RelativePath(path)
+        | Expr::AbsolutePath(path)
+        | Expr::HomePath(path)
+        | Expr::SearchPath(path) => format!("({path})"),
         Expr::String(parts) => super::string(parts, render),
         Expr::List(items) => format!(
             "[{}]",
