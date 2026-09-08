@@ -4,6 +4,7 @@ use super::{NxcLanguage, SyntaxKind as K, SyntaxNode};
 use crate::{
     Diagnostic, MAX_DEPTH,
     ir::{self, AttrName, BinaryOp, Binding, Expr, Formal, Pattern, StringPart},
+    string::StringContext,
 };
 use rowan::ast::AstNode;
 
@@ -26,6 +27,14 @@ impl AstNode for Expression {
 
 impl Expression {
     pub(super) fn lower(&self, depth: usize) -> Result<Expr, Diagnostic> {
+        self.lower_with_string_context(depth, StringContext::Value)
+    }
+
+    fn lower_with_string_context(
+        &self,
+        depth: usize,
+        context: StringContext,
+    ) -> Result<Expr, Diagnostic> {
         // Reject excessive recursion before building the IR. Delimiter-free
         // chains can pass parser preflight but exceed the semantic depth limit.
         if depth > MAX_DEPTH {
@@ -47,10 +56,14 @@ impl Expression {
                 )
             })?;
         }
-        expr.lower_unparenthesized(depth)
+        expr.lower_unparenthesized(depth, context)
     }
 
-    fn lower_unparenthesized(&self, depth: usize) -> Result<Expr, Diagnostic> {
+    fn lower_unparenthesized(
+        &self,
+        depth: usize,
+        context: StringContext,
+    ) -> Result<Expr, Diagnostic> {
         let span = self.0.text_range();
         let error =
             |message| Diagnostic::new(usize::from(span.start())..usize::from(span.end()), message);
@@ -86,7 +99,7 @@ impl Expression {
                     .map(|item| item.lower(depth + 1))
                     .collect::<Result<_, _>>()?,
             )),
-            K::StringExpr => lower_string(&self.0, depth),
+            K::StringExpr => lower_string(&self.0, depth, context),
             K::AttrSetExpr => Ok(Expr::AttrSet {
                 recursive: self
                     .0
@@ -193,7 +206,7 @@ fn lower_bindings(node: &SyntaxNode, depth: usize) -> Result<Vec<Binding>, Diagn
         .filter(|node| !node.kind().is_expr())
         .map(|binding| match binding.kind() {
             K::AssignBinding => Ok(Binding::Assign {
-                path: lower_path(&binding)?,
+                path: lower_binding_path(&binding, depth)?,
                 value: binding
                     .children()
                     .find_map(Expression::cast)
@@ -215,7 +228,12 @@ fn lower_bindings(node: &SyntaxNode, depth: usize) -> Result<Vec<Binding>, Diagn
                 names: binding
                     .children()
                     .filter(|n| n.kind() == K::AttrName)
-                    .map(|name| lower_attr(&name))
+                    .map(|name| {
+                        let key = lower_attr(&name, depth)?;
+                        key.literal_name()
+                            .map(ToOwned::to_owned)
+                            .ok_or_else(|| error("dynamic attributes are not allowed in inherit"))
+                    })
                     .collect::<Result<_, _>>()?,
             }),
             _ => Err(error("cannot lower an erroneous binding")),
@@ -223,7 +241,11 @@ fn lower_bindings(node: &SyntaxNode, depth: usize) -> Result<Vec<Binding>, Diagn
         .collect()
 }
 
-fn lower_string(node: &SyntaxNode, depth: usize) -> Result<Expr, Diagnostic> {
+fn lower_string(
+    node: &SyntaxNode,
+    depth: usize,
+    context: StringContext,
+) -> Result<Expr, Diagnostic> {
     let range = node.text_range();
     let error = |message| {
         Diagnostic::new(
@@ -240,52 +262,37 @@ fn lower_string(node: &SyntaxNode, depth: usize) -> Result<Expr, Diagnostic> {
                 part.children()
                     .find_map(Expression::cast)
                     .ok_or_else(|| error("missing interpolation expression"))?
-                    .lower(depth + 1)?,
+                    .lower_with_string_context(
+                        depth + 1,
+                        if indented {
+                            context
+                        } else {
+                            StringContext::Value
+                        },
+                    )?,
             ),
             _ => return Err(error("cannot lower an erroneous string part")),
         });
     }
-    crate::string::lower(parts, indented).map_err(error)
+    crate::string::lower(parts, indented, context).map_err(error)
 }
 
 fn lower_selection_path(node: &SyntaxNode, depth: usize) -> Result<Vec<AttrName>, Diagnostic> {
     node.children()
         .filter(|node| node.kind() == K::AttrName)
-        .map(|name| {
-            if let Some(key) = name.children().find_map(Expression::cast) {
-                if name.first_token().is_some_and(|token| token.text() == "''") {
-                    let range = name.text_range();
-                    return Err(Diagnostic::new(
-                        usize::from(range.start())..usize::from(range.end()),
-                        "attribute names require double quotes",
-                    ));
-                }
-                Ok(AttrName::Dynamic(Box::new(key.lower(depth + 1)?)))
-            } else {
-                lower_attr(&name).map(AttrName::Static)
-            }
-        })
+        .map(|name| lower_attr(&name, depth))
         .collect()
 }
 
-fn lower_path(node: &SyntaxNode) -> Result<Vec<String>, Diagnostic> {
-    let path = node
-        .children()
-        .find(|node| node.kind() == K::AttrPath)
-        .ok_or_else(|| {
-            let range = node.text_range();
-            Diagnostic::new(
-                usize::from(range.start())..usize::from(range.end()),
-                "missing attribute path",
-            )
-        })?;
-    path.children()
+fn lower_binding_path(node: &SyntaxNode, depth: usize) -> Result<Vec<AttrName>, Diagnostic> {
+    node.children()
         .filter(|node| node.kind() == K::AttrName)
-        .map(|node| lower_attr(&node))
+        .enumerate()
+        .map(|(index, name)| lower_attr(&name, depth + index))
         .collect()
 }
 
-fn lower_attr(node: &SyntaxNode) -> Result<String, Diagnostic> {
+fn lower_attr(node: &SyntaxNode, depth: usize) -> Result<AttrName, Diagnostic> {
     let range = node.text_range();
     let error = |message| {
         Diagnostic::new(
@@ -293,18 +300,26 @@ fn lower_attr(node: &SyntaxNode) -> Result<String, Diagnostic> {
             message,
         )
     };
+    if node.first_token().is_some_and(|token| token.text() == "''") {
+        return Err(error("attribute names require double quotes"));
+    }
+    if let Some(key) = node.children().find_map(Expression::cast) {
+        return Ok(AttrName::Dynamic(Box::new(key.lower_with_string_context(
+            depth + 1,
+            StringContext::AttributeKey,
+        )?)));
+    }
     let name = node.text().to_string();
     if node
         .first_token()
         .is_some_and(|token| token.kind() == K::StringStart)
     {
-        if !name.starts_with('"') {
-            return Err(error("attribute names require double quotes"));
-        }
-        crate::string::decode(&name[1..name.len() - 1]).map_err(error)
+        crate::string::decode(&name[1..name.len() - 1])
+            .map(AttrName::Static)
+            .map_err(error)
     } else {
         ir::validate_bare_attr_name(&name).map_err(error)?;
-        Ok(name)
+        Ok(AttrName::Static(name))
     }
 }
 

@@ -3,8 +3,19 @@
 use crate::ir::{Expr, StringPart, push_string_literal};
 use std::borrow::Cow;
 
+/// A direct key observes whether Nix parses a string as a literal or a concatenation.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(crate) enum StringContext {
+    Value,
+    AttributeKey,
+}
+
 /// Normalize raw literal fragments and already-lowered interpolations.
-pub(crate) fn lower(mut parts: Vec<StringPart>, indented: bool) -> Result<Expr, &'static str> {
+pub(crate) fn lower(
+    mut parts: Vec<StringPart>,
+    indented: bool,
+    context: StringContext,
+) -> Result<Expr, &'static str> {
     if !indented {
         let mut result = Vec::new();
         for part in parts {
@@ -69,18 +80,20 @@ pub(crate) fn lower(mut parts: Vec<StringPart>, indented: bool) -> Result<Expr, 
     at_start = true;
     let mut dropped = 0;
     let last_part = parts.len().saturating_sub(1);
+    let mut fragments = 0;
     for (index, part) in parts.into_iter().enumerate() {
         match part {
             StringPart::Interpolation(_) => {
                 at_start = false;
                 dropped = 0;
+                fragments += 1;
                 result.push(part);
             }
             StringPart::Literal(text) => {
                 let mut chunks = indented_chunks(&text).peekable();
                 while let Some(chunk) = chunks.next() {
                     let (text, raw) = chunk?;
-                    let decoded = if raw {
+                    let decoded = if raw || !text.starts_with("''") {
                         Cow::Borrowed(text)
                     } else if text == "'''" {
                         Cow::Borrowed("''")
@@ -119,9 +132,33 @@ pub(crate) fn lower(mut parts: Vec<StringPart>, indented: bool) -> Result<Expr, 
                     {
                         stripped.truncate(newline + 1);
                     }
+                    if !stripped.is_empty() {
+                        fragments += 1;
+                    }
                     push_string_literal(&mut result, stripped);
                 }
             }
+        }
+    }
+    if context == StringContext::AttributeKey {
+        // Nix removes empty literal fragments, then collapses a sole ExprString,
+        // even when that string came from an interpolation. Multiple surviving
+        // fragments must remain computed after canonical emission merges text.
+        if fragments == 1
+            && let [StringPart::Interpolation(Expr::String(parts))] = result.as_slice()
+            && !parts
+                .iter()
+                .any(|part| matches!(part, StringPart::Interpolation(_)))
+        {
+            let StringPart::Interpolation(value) = result.pop().unwrap() else {
+                unreachable!()
+            };
+            return Ok(value);
+        }
+        if fragments > 1 && matches!(result.as_slice(), [StringPart::Literal(_)]) {
+            return Ok(Expr::String(vec![StringPart::Interpolation(Expr::String(
+                result,
+            ))]));
         }
     }
     Ok(Expr::String(result))
@@ -133,9 +170,31 @@ fn indented_chunks(mut text: &str) -> impl Iterator<Item = Result<(&str, bool), 
         if text.is_empty() {
             return None;
         }
-        let raw = !text.starts_with("''");
+        // Match native IND_STR boundaries, including lone dollars/quotes.
+        // Paired characters in a raw run are consumed together by Nix's lexer.
+        let mut chars = text.char_indices().peekable();
+        let mut raw_len = 0;
+        while let Some((index, c)) = chars.next() {
+            if c == '$' || c == '\'' {
+                let paired = chars.peek().is_some_and(|(_, next)| {
+                    if c == '$' {
+                        !matches!(next, '{' | '\'')
+                    } else {
+                        !matches!(next, '\'' | '$')
+                    }
+                });
+                if !paired {
+                    break;
+                }
+                let (index, c) = chars.next().unwrap();
+                raw_len = index + c.len_utf8();
+            } else {
+                raw_len = index + c.len_utf8();
+            }
+        }
+        let raw = raw_len != 0;
         let len = if raw {
-            text.find("''").unwrap_or(text.len())
+            raw_len
         } else if text.starts_with("'''") || text.starts_with("''$") {
             3
         } else if text.starts_with("''\\") {
@@ -146,6 +205,8 @@ fn indented_chunks(mut text: &str) -> impl Iterator<Item = Result<(&str, bool), 
                     return Some(Err("unterminated indented string escape"));
                 }
             }
+        } else if !text.starts_with("''") {
+            1
         } else {
             text = "";
             return Some(Err("unexpected indented string delimiter"));

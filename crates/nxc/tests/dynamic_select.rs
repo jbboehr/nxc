@@ -90,9 +90,9 @@ fn malformed_dynamic_keys_are_lossless_and_later_items_recover() {
         r#"s."${}""#,
         "s.''${key}''",
         "${key}",
-        "{ ${key} = 1; }",
-        r#"{ "${key}" = 1; }"#,
-        "{ a.${key} = 1; }",
+        "{ ${} = 1; }",
+        r#"{ "${}" = 1; }"#,
+        "{ a.${} = 1; }",
         "{ inherit (s) ${key}; }",
         r#"{ inherit (s) "${key}"; }"#,
     ] {
@@ -108,9 +108,9 @@ fn malformed_dynamic_keys_are_lossless_and_later_items_recover() {
         "s.${/absolute/path}",
         "s.${x ? y}",
         "s.''${key}''",
-        "{ ${key} = 1; }",
-        r#"{ "${key}" = 1; }"#,
-        "{ a.${key} = 1; }",
+        "{ ${} = 1; }",
+        r#"{ "${}" = 1; }"#,
+        "{ a.${} = 1; }",
         "{ inherit (s) ${key}; }",
     ] {
         assert!(nix::import(native).is_err(), "accepted native {native}");

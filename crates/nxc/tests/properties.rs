@@ -66,15 +66,23 @@ fn expressions() -> impl Strategy<Value = Expr> {
                 StringPart::Interpolation(value),
                 StringPart::Literal("${suffix}\\\"".into()),
             ])),
-            (inner.clone(), any::<bool>(), attribute_names()).prop_map(
-                |(value, recursive, name)| Expr::AttrSet {
+            (
+                inner.clone(),
+                any::<bool>(),
+                prop::collection::vec(
+                    prop_oneof![
+                        attribute_names().prop_map(AttrName::Static),
+                        inner
+                            .clone()
+                            .prop_map(|key| AttrName::Dynamic(Box::new(key))),
+                    ],
+                    1..4
+                )
+            )
+                .prop_map(|(value, recursive, path)| Expr::AttrSet {
                     recursive,
-                    bindings: vec![Binding::Assign {
-                        path: vec!["a".into(), name],
-                        value
-                    }],
-                }
-            ),
+                    bindings: vec![Binding::Assign { path, value }],
+                }),
             (inner.clone(), attribute_names()).prop_map(|(source, name)| Expr::AttrSet {
                 recursive: false,
                 bindings: vec![Binding::Inherit {

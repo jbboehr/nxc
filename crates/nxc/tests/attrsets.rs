@@ -82,7 +82,7 @@ fn native_selection_lambda_defaults_require_parentheses() {
 }
 
 #[test]
-fn malformed_attributes_and_dynamic_bindings_are_rejected_losslessly() {
+fn malformed_attributes_are_rejected_losslessly() {
     for source in [
         "{ a = 1 }",
         "{ a = ; b = 2; }",
@@ -99,8 +99,8 @@ fn malformed_attributes_and_dynamic_bindings_are_rejected_losslessly() {
         "s.1",
         "{ 1 = 2; }",
         "{ rec = 1; }",
-        "{ \"${a}\" = 1; }",
-        "{ ${x} = 1; }",
+        "{ \"${}\" = 1; }",
+        "{ ${} = 1; }",
         "s.${}",
         "s.\"${}\"",
         "s ? x",

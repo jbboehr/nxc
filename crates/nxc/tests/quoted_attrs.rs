@@ -162,10 +162,10 @@ fn decoded_aliases_conflict_but_dots_inside_names_do_not_split_paths() {
 #[test]
 fn unsupported_names_remain_lossless_errors_and_recover_later_items() {
     for source in [
-        r#"{ "${x}" = 1; }"#,
+        r#"{ "${}" = 1; }"#,
         r#"s."${}""#,
         r#"{ inherit (s) "${x}"; }"#,
-        r#"{ ${"x"} = 1; }"#,
+        r#"{ ${} = 1; }"#,
         "{ ''x'' = 1; }",
         "s.''x''",
         "{ inherit (s) ''x''; }",
@@ -183,7 +183,7 @@ fn unsupported_names_remain_lossless_errors_and_recover_later_items() {
         assert!(parsed.lower().is_err(), "accepted {source:?}");
     }
     for native in [
-        r#"{ "${x}" = 1; }"#,
+        r#"{ "${}" = 1; }"#,
         r#"s."${}""#,
         r#"{ inherit (s) "${x}"; }"#,
         "{ ''x'' = 1; }",
@@ -233,7 +233,7 @@ fn quoted_names_obey_byte_token_and_nesting_limits() {
     for name in ["\0".to_owned(), "a".repeat(MAX_SOURCE_BYTES + 1)] {
         for binding in [
             Binding::Assign {
-                path: vec![name.clone()],
+                path: vec![name.clone().into()],
                 value: Expr::Integer(1),
             },
             Binding::Inherit {

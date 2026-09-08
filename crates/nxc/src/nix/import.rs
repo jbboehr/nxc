@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only WITH romic-exception
 
+use crate::string::StringContext;
 use crate::{
     Diagnostic, MAX_DEPTH, MAX_SOURCE_BYTES, MAX_TOKENS,
     ir::{self, AttrName, BinaryOp, Binding, Expr, Formal, Pattern, StringPart},
@@ -166,7 +167,15 @@ fn syntax(node: &impl ast::AstNode) -> &rnix::SyntaxNode {
     node.syntax()
 }
 
-fn lower(mut node: ast::Expr, depth: usize) -> Result<Expr, Diagnostic> {
+fn lower(node: ast::Expr, depth: usize) -> Result<Expr, Diagnostic> {
+    lower_with_string_context(node, depth, StringContext::Value)
+}
+
+fn lower_with_string_context(
+    mut node: ast::Expr,
+    depth: usize,
+    context: StringContext,
+) -> Result<Expr, Diagnostic> {
     // Parentheses do not add semantic depth. Unwrap them without adding stack
     // frames so fully parenthesized output still fits the supported depth.
     while let ast::Expr::Paren(paren) = node {
@@ -235,7 +244,7 @@ fn lower(mut node: ast::Expr, depth: usize) -> Result<Expr, Diagnostic> {
             })
         }
         ast::Expr::List(list) => lower_list(list, depth),
-        ast::Expr::Str(string) => lower_string(string, depth),
+        ast::Expr::Str(string) => lower_string(string, depth, context),
         ast::Expr::AttrSet(set) => Ok(Expr::AttrSet {
             recursive: set.rec_token().is_some(),
             bindings: lower_bindings(&set, depth)?,
@@ -381,7 +390,7 @@ fn lower_bindings(node: &impl HasEntry, depth: usize) -> Result<Vec<Binding>, Di
     node.entries()
         .map(|entry| match entry {
             ast::Entry::AttrpathValue(binding) => {
-                let path = lower_path(binding.attrpath())?;
+                let path = lower_binding_path(binding.attrpath(), depth)?;
                 let value = lower(
                     binding
                         .value()
@@ -402,13 +411,25 @@ fn lower_bindings(node: &impl HasEntry, depth: usize) -> Result<Vec<Binding>, Di
                         )
                     })
                     .transpose()?,
-                names: inherit.attrs().map(lower_attr).collect::<Result<_, _>>()?,
+                names: inherit
+                    .attrs()
+                    .map(|attr| {
+                        let key = lower_attr(attr, depth)?;
+                        key.literal_name()
+                            .map(ToOwned::to_owned)
+                            .ok_or_else(|| error("dynamic attributes are not allowed in inherit"))
+                    })
+                    .collect::<Result<_, _>>()?,
             }),
         })
         .collect()
 }
 
-fn lower_string(string: ast::Str, depth: usize) -> Result<Expr, Diagnostic> {
+fn lower_string(
+    string: ast::Str,
+    depth: usize,
+    context: StringContext,
+) -> Result<Expr, Diagnostic> {
     let range = syntax(&string).text_range();
     let error = |message| {
         Diagnostic::new(
@@ -423,15 +444,22 @@ fn lower_string(string: ast::Str, depth: usize) -> Result<Expr, Diagnostic> {
     for part in string.parts() {
         parts.push(match part {
             InterpolPart::Literal(text) => StringPart::Literal(text.syntax().text().to_owned()),
-            InterpolPart::Interpolation(value) => StringPart::Interpolation(lower(
-                value
-                    .expr()
-                    .ok_or_else(|| error("missing interpolation expression"))?,
-                depth + 1,
-            )?),
+            InterpolPart::Interpolation(value) => {
+                StringPart::Interpolation(lower_with_string_context(
+                    value
+                        .expr()
+                        .ok_or_else(|| error("missing interpolation expression"))?,
+                    depth + 1,
+                    if indented {
+                        context
+                    } else {
+                        StringContext::Value
+                    },
+                )?)
+            }
         });
     }
-    crate::string::lower(parts, indented).map_err(error)
+    crate::string::lower(parts, indented, context).map_err(error)
 }
 
 // Keep collection machinery out of the recursive lower frame.
@@ -460,43 +488,22 @@ fn lower_selection_path(
 ) -> Result<Vec<AttrName>, Diagnostic> {
     path.ok_or_else(|| Diagnostic::new(0..0, "missing native attribute path"))?
         .attrs()
-        .map(|attr| {
-            let range = syntax(&attr).text_range();
-            let error = |message| {
-                Diagnostic::new(
-                    usize::from(range.start())..usize::from(range.end()),
-                    message,
-                )
-            };
-            match attr {
-                ast::Attr::Dynamic(key) => Ok(AttrName::Dynamic(Box::new(lower(
-                    key.expr()
-                        .ok_or_else(|| error("missing dynamic key expression"))?,
-                    depth + 1,
-                )?))),
-                ast::Attr::Str(string)
-                    if string
-                        .parts()
-                        .any(|part| matches!(part, InterpolPart::Interpolation(_))) =>
-                {
-                    if !syntax(&string)
-                        .first_token()
-                        .is_some_and(|token| token.text() == "\"")
-                    {
-                        return Err(error("attribute names require double quotes"));
-                    }
-                    Ok(AttrName::Dynamic(Box::new(lower_string(
-                        string,
-                        depth + 1,
-                    )?)))
-                }
-                attr => lower_attr(attr).map(AttrName::Static),
-            }
-        })
+        .map(|attr| lower_attr(attr, depth))
         .collect()
 }
 
-fn lower_attr(attr: ast::Attr) -> Result<String, Diagnostic> {
+fn lower_binding_path(
+    path: Option<ast::Attrpath>,
+    depth: usize,
+) -> Result<Vec<AttrName>, Diagnostic> {
+    path.ok_or_else(|| Diagnostic::new(0..0, "missing native attribute path"))?
+        .attrs()
+        .enumerate()
+        .map(|(index, attr)| lower_attr(attr, depth + index))
+        .collect()
+}
+
+fn lower_attr(attr: ast::Attr, depth: usize) -> Result<AttrName, Diagnostic> {
     let range = syntax(&attr).text_range();
     let error = |message| {
         Diagnostic::new(
@@ -508,7 +515,7 @@ fn lower_attr(attr: ast::Attr) -> Result<String, Diagnostic> {
         ast::Attr::Ident(ident) => {
             let name = syntax(&ident).text().to_string();
             ir::validate_bare_attr_name(&name).map_err(error)?;
-            Ok(name)
+            Ok(AttrName::Static(name))
         }
         ast::Attr::Str(string) => {
             if !syntax(&string)
@@ -521,18 +528,22 @@ fn lower_attr(attr: ast::Attr) -> Result<String, Diagnostic> {
                 .parts()
                 .any(|part| matches!(part, ast::InterpolPart::Interpolation(_)))
             {
-                return Err(error("dynamic attributes are not supported yet"));
+                return Ok(AttrName::Dynamic(Box::new(lower_string(
+                    string,
+                    depth + 1,
+                    StringContext::AttributeKey,
+                )?)));
             }
             let text = syntax(&string).text().to_string();
-            crate::string::decode(&text[1..text.len() - 1]).map_err(error)
+            crate::string::decode(&text[1..text.len() - 1])
+                .map(AttrName::Static)
+                .map_err(error)
         }
-        _ => Err(error("dynamic attributes are not supported yet")),
+        ast::Attr::Dynamic(key) => Ok(AttrName::Dynamic(Box::new(lower_with_string_context(
+            key.expr()
+                .ok_or_else(|| error("missing dynamic key expression"))?,
+            depth + 1,
+            StringContext::AttributeKey,
+        )?))),
     }
-}
-
-fn lower_path(path: Option<ast::Attrpath>) -> Result<Vec<String>, Diagnostic> {
-    path.ok_or_else(|| Diagnostic::new(0..0, "missing native attribute path"))?
-        .attrs()
-        .map(lower_attr)
-        .collect()
 }

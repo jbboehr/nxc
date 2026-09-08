@@ -147,12 +147,7 @@ pub(super) fn parse(tokens: &[Token], source_len: usize) -> (Option<Node>, Vec<D
                 .delimited_by(just(K::StringStart), just(K::StringEnd))
                 // Static keys have no expression children, just like bare names.
                 .map_with(|_, e| Node::new(K::AttrName, e.span(), vec![])));
-        let path = attr_name
-            .separated_by(just(K::Dot))
-            .at_least(1)
-            .collect::<Vec<_>>()
-            .map_with(|names, e| Node::new(K::AttrPath, e.span(), names));
-        let selection_path = choice((
+        let attr_name = choice((
             attr_name,
             expr.clone()
                 .delimited_by(just(K::InterpolationStart), just(K::InterpolationEnd))
@@ -160,14 +155,22 @@ pub(super) fn parse(tokens: &[Token], source_len: usize) -> (Option<Node>, Vec<D
             string
                 .clone()
                 .map_with(|key, e| Node::new(K::AttrName, e.span(), vec![key])),
-        ))
-        .separated_by(just(K::Dot))
-        .at_least(1)
-        .collect::<Vec<_>>();
-        let assignment = path
+        ));
+        let selection_path = attr_name
+            .clone()
+            .separated_by(just(K::Dot))
+            .at_least(1)
+            .collect::<Vec<_>>();
+        let assignment = selection_path
+            .clone()
             .then_ignore(just(K::Assign))
             .then(expr.clone())
-            .map_with(|(path, value), e| Node::new(K::AssignBinding, e.span(), vec![path, value]));
+            .map_with(|(mut path, value), e| {
+                // Dynamic key expressions share the binding's child level;
+                // an extra path wrapper would exceed the CST depth bound.
+                path.push(value);
+                Node::new(K::AssignBinding, e.span(), path)
+            });
         let inherit_source = expr
             .clone()
             .delimited_by(just(K::LParen), just(K::RParen))

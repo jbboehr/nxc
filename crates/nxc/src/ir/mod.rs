@@ -60,13 +60,31 @@ pub enum Expr {
     },
 }
 
-/// A selection key. Quoted interpolation retains its `Expr::String` wrapper
-/// because Nix coerces string interpolations but requires direct keys to be strings.
+/// An attribute key. Quoted interpolation retains its `Expr::String` wrapper
+/// to preserve Nix's string coercion; direct keys keep their original expression.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum AttrName {
     /// Decoded text; dots within a name are not path separators.
     Static(String),
     Dynamic(Box<Expr>),
+}
+
+impl AttrName {
+    /// Nix treats a direct string literal inside `${...}` as a static binding
+    /// name, but keeps interpolated strings dynamic. No evaluation is involved.
+    pub(crate) fn literal_name(&self) -> Option<&str> {
+        match self {
+            Self::Static(name) => Some(name),
+            Self::Dynamic(key) => match key.as_ref() {
+                Expr::String(parts) => match parts.as_slice() {
+                    [] => Some(""),
+                    [StringPart::Literal(name)] => Some(name),
+                    _ => None,
+                },
+                _ => None,
+            },
+        }
+    }
 }
 
 impl From<String> for AttrName {
@@ -104,8 +122,8 @@ pub(crate) fn push_string_literal(parts: &mut Vec<StringPart>, text: String) {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Binding {
     Assign {
-        /// Decoded static names, independent of identifier or quoted spelling.
-        path: Vec<String>,
+        /// Ordered static/dynamic keys; dotted paths retain their implicit sets.
+        path: Vec<AttrName>,
         value: Expr,
     },
     Inherit {
@@ -302,10 +320,22 @@ impl Expr {
                     for binding in bindings {
                         match binding {
                             Binding::Assign { path, value } => {
-                                validate_path(path, &mut count, &mut literal_bytes)
-                                    .map_err(error)?;
+                                validate_path_length(path.len(), &mut count).map_err(error)?;
                                 if local {
-                                    validate_scoped_name(&path[0]).map_err(error)?;
+                                    let name = path[0].literal_name().ok_or_else(||
+                                        error("dynamic attributes are not allowed at the root of let bindings"))?;
+                                    validate_scoped_name(name).map_err(error)?;
+                                }
+                                for (index, name) in path.iter().enumerate() {
+                                    match name {
+                                        AttrName::Static(name) => {
+                                            validate_attr_name(name, &mut literal_bytes)
+                                                .map_err(error)?;
+                                        }
+                                        AttrName::Dynamic(key) => {
+                                            pending.push((key, depth + index + 1))
+                                        }
+                                    }
                                 }
                                 // Dotted bindings introduce implicit nested attrsets.
                                 pending.push((value, depth + path.len()));
@@ -417,18 +447,6 @@ fn validate_attr_name(name: &str, literal_bytes: &mut usize) -> Result<(), &'sta
     Ok(())
 }
 
-fn validate_path(
-    path: &[String],
-    count: &mut usize,
-    literal_bytes: &mut usize,
-) -> Result<(), &'static str> {
-    validate_path_length(path.len(), count)?;
-    for name in path {
-        validate_attr_name(name, literal_bytes)?;
-    }
-    Ok(())
-}
-
 fn validate_path_length(len: usize, count: &mut usize) -> Result<(), &'static str> {
     if len == 0 {
         return Err("attribute path must not be empty");
@@ -443,6 +461,8 @@ fn validate_path_length(len: usize, count: &mut usize) -> Result<(), &'static st
 fn validate_bindings(bindings: &[Binding]) -> Result<(), &'static str> {
     use std::collections::{BTreeMap, btree_map::Entry};
     // A set can merge with another literal set; a value/inherit is a leaf.
+    // Computed keys belong to separate runtime bindings. Only their static
+    // prefix participates in cross-declaration merges and conflict checks.
     fn insert<'a>(
         shape: &mut BTreeMap<Vec<&'a str>, bool>,
         path: Vec<&'a str>,
@@ -467,11 +487,16 @@ fn validate_bindings(bindings: &[Binding]) -> Result<(), &'static str> {
                 Binding::Assign { path, value } => {
                     let mut full = prefix.to_vec();
                     for (index, name) in path.iter().enumerate() {
+                        let Some(name) = name.literal_name() else {
+                            break;
+                        };
                         full.push(name);
                         let set = index + 1 < path.len() || matches!(value, Expr::AttrSet { .. });
                         insert(shape, full.clone(), set)?;
                     }
-                    if let Expr::AttrSet { bindings, .. } = value {
+                    if path.iter().all(|name| name.literal_name().is_some())
+                        && let Expr::AttrSet { bindings, .. } = value
+                    {
                         visit(bindings, &full, shape)?;
                     }
                 }

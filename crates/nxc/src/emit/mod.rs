@@ -48,9 +48,13 @@ fn attribute(name: &str) -> String {
     source
 }
 
-fn attribute_path(path: &[String]) -> String {
+fn attribute_path(path: &[crate::ir::AttrName], render: fn(&crate::ir::Expr) -> String) -> String {
+    use crate::ir::AttrName;
     path.iter()
-        .map(|name| attribute(name))
+        .map(|name| match name {
+            AttrName::Static(name) => attribute(name),
+            AttrName::Dynamic(key) => format!("${{{}}}", render(key)),
+        })
         .collect::<Vec<_>>()
         .join(".")
 }
@@ -77,7 +81,11 @@ pub(crate) fn bindings(
         source.push(' ');
         match binding {
             Binding::Assign { path, value } => {
-                source.push_str(&format!("{} = {};", attribute_path(path), render(value)));
+                source.push_str(&format!(
+                    "{} = {};",
+                    attribute_path(path, render),
+                    render(value)
+                ));
             }
             Binding::Inherit {
                 source: from,
@@ -104,15 +112,7 @@ pub(crate) fn selection(
     default: Option<&crate::ir::Expr>,
     render: fn(&crate::ir::Expr) -> String,
 ) -> String {
-    use crate::ir::AttrName;
-    let path = path
-        .iter()
-        .map(|name| match name {
-            AttrName::Static(name) => attribute(name),
-            AttrName::Dynamic(key) => format!("${{{}}}", render(key)),
-        })
-        .collect::<Vec<_>>()
-        .join(".");
+    let path = attribute_path(path, render);
     let mut source = format!("(({}).{path}", render(value));
     if let Some(default) = default {
         source.push_str(&format!(" or ({})", render(default)));

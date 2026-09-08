@@ -20,7 +20,7 @@ support is provided by `.envrc` (`direnv allow`).
 The current subset implements identifiers, integers, parentheses, arithmetic,
 comparison and Boolean operators, calls, and simple/attribute-pattern lambdas in
 both conversion directions.
-It also includes static attrsets with bare/quoted names, dotted bindings,
+It also includes attrsets with static/dynamic names, dotted bindings,
 inheritance, and static/dynamic selections with defaults, lists and concatenation,
 `let`, `with`, `if`, and `assert` expressions,
 double-quoted/indented strings, interpolation, literal relative paths, native
@@ -55,6 +55,7 @@ short-circuit Boolean operators, implication normalization, comparison values
 and lazy collection equality,
 shallow attrset updates, operand forcing and lazy overridden attributes,
 dynamic selection keys, coercion and lazy path traversal,
+dynamic binding names, null-key omission and runtime collisions,
 argument validation, recursive set merges, local binding and `with` scope, inheritance,
 lazy conditional branches, assertion failures and evaluation order,
 list boundaries/laziness, concatenation order and operand forcing,
@@ -213,22 +214,38 @@ sources. Avoid sorting or expanding bindings: when Nix merges literal nested
 sets, the first declaration's recursive flag can affect scope. Structural
 validation checks static binding conflicts after the entire IR passes resource
 bounds. Inheritance remains distinct from assignment to preserve its scope.
-Static binding paths and inheritance names store decoded strings, so quoted
-and bare spellings of the same key compare equal and participate in the same
-conflict checks. Both frontends reuse the double-quoted string decoder and
-reject interpolated binding names and indented attribute names before decoding.
-Emission quotes names that cannot be bare identifiers and shares string escaping.
-Names count toward the aggregate literal-byte budget, and NUL is rejected.
-Static quoted keys use flat `AttrName` CST nodes to retain the existing nesting bounds.
-This follows native Nix's
+Binding paths use the same `AttrName` representation as selections. Static names
+store decoded strings, so quoted and bare spellings compare equal. A direct
+literal expression such as `${"x"}` is retained in the IR but recognized as
+static for binding conflicts and scope restrictions, matching native Nix.
+Double-quoted interpolated strings keep their coercion wrapper and remain dynamic.
+Direct indented-string keys retain Nix's literal-versus-concatenation distinction:
+normalization counts nonempty native lexical fragments before merging their text,
+and uses a string interpolation wrapper to keep concatenated literals computed.
+Nix's single-literal interpolation collapse is preserved only in this key context,
+including nested indented strings and parentheses. Other expression positions
+retain ordinary string normalization. No key expression is evaluated. Conflict checking stops at the first computed
+component, leaving computed-name collisions to Nix while still checking static
+prefixes and nested literal sets. Dotted paths and declaration order are emitted
+unchanged to preserve recursive merge scope, null-key omission, and lazy values.
+Every key expression is validated, including keys after a potentially null name;
+its semantic depth includes the implicit attrsets preceding its path component.
+Both frontends share their attribute lowering across bindings and selections.
+Inheritance lowers only statically known names to decoded strings. Indented
+attribute names are rejected; indented string expressions inside `${...}` work.
+Emission quotes static names when needed and shares string escaping. Names count
+toward the aggregate literal-byte budget, and NUL is rejected. Static quoted keys
+use flat CST nodes; assignment and selection keys sit directly under their parent
+nodes to retain the existing physical tree depth bound. This follows native Nix's
 [attribute grammar](https://github.com/NixOS/nix/blob/2.34.8/src/libexpr/parser.y).
-Dynamic bindings remain a later slice.
 
 `Expr::Let` reuses ordered bindings and retains a separate body. Bindings are
 neither expanded into assignments nor rewritten as recursive attrset selections;
 plain inheritance keeps its outer-scope lookup. The first path component and
 inherited names may use quoted static strings, including names that are not
-identifiers. They retain the variable-name reservations even when quoted or
+identifiers, or direct literal expressions such as `${"x"}`. Computed first
+components are rejected, but later components may be dynamic. Static names
+retain the variable-name reservations even when quoted or
 inherited through `inherit (source)`. Remaining path components use
 attribute-name validation.
 Both binding values and the body pass the shared resource checks.
@@ -281,7 +298,7 @@ Keeping one path preserves Nix's lookup order and skips later keys after a
 missing prefix when a default is present. Dynamic children count toward the
 same semantic node, byte, and depth bounds as other expressions, even if lazy.
 Selection CST keys sit directly under `SelectExpr` to bound the physical tree
-depth of nested key expressions; assignment paths keep their `AttrPath` wrapper.
+depth of nested key expressions; assignment keys use the same arrangement.
 The lexer recognizes `${...}` outside strings using the same interpolation mode.
 The parser uses Nix's simple-expression precedence for `or`; emitters parenthesize fallback
 expressions to preserve the IR. Attribute paths are bounded, and dotted bindings
@@ -317,7 +334,6 @@ Both quote styles use the same CST string nodes and canonical IR. The lexer
 tracks the quote style in its iterative mode stack. Canonical output uses double
 quotes and escapes every literal dollar to preserve interpolation boundaries.
 String and interpolation delimiters count toward nesting limits in both paths.
-Dynamic binding paths remain a later slice.
 
 `Expr::RelativePath` preserves literal relative path text without filesystem
 access, resolution, or normalization. Logos recognizes path-shaped text before

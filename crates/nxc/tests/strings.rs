@@ -76,7 +76,7 @@ fn malformed_and_unsupported_strings_remain_lossless_errors() {
         r#""${@}""#,
         r#""${"nested}""#,
         "\"a\0b\"",
-        r#"{ "${quoted}" = 1; }"#,
+        r#"{ "${}" = 1; }"#,
         r#"s."${}""#,
         r#""${a ? b}""#,
     ] {

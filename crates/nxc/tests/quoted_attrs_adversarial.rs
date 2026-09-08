@@ -15,7 +15,7 @@ fn non_nul_control_characters_remain_static_keys() {
         value: Box::new(Expr::AttrSet {
             recursive: false,
             bindings: vec![Binding::Assign {
-                path: vec![name.clone()],
+                path: vec![name.clone().into()],
                 value: Expr::Integer(1),
             }],
         }),

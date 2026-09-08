@@ -9,7 +9,7 @@ A C/Rust-flavored concrete syntax for Nix with unchanged Nix evaluation semantic
 
 The current subset supports identifiers, integer literals, parentheses,
 arithmetic, comparison and Boolean operators, curried function calls, and lambdas
-with simple or attribute-pattern parameters. Static attrsets and attribute
+with simple or attribute-pattern parameters. Attrsets and attribute
 selections, lists, `let`, `with`, `if`, and `assert` expressions, double-quoted and
 indented strings, string interpolation, and literal relative paths are also
 supported.
@@ -123,6 +123,20 @@ this distinction and may print `values."${name}"` as `values.${"${name}"}`.
 The `or` default applies to the whole path; a missing component skips any
 remaining key expressions. Conversion does not evaluate keys or defaults.
 
+Bindings also accept dynamic names and mixed dotted paths:
+
+```nix
+{ ${name} = value; "prefix-${name}".answer = 42; }
+```
+
+Nix evaluates computed names when constructing the set; binding values remain
+lazy. A direct `null` key omits that entry without evaluating its remaining path
+or value. Computed keys that collide produce an evaluation error. Direct literal
+keys such as `${"x"}` follow the same scope and conflict rules as `x`, while
+`"${"x"}"` remains computed and does not introduce a variable into recursive scope.
+Escapes in a direct indented-string key can also make it computed in Nix;
+conversion preserves this distinction, sometimes using quoted interpolation.
+
 Local bindings use `let { ... yield ...; }`:
 
 ```nix
@@ -145,6 +159,9 @@ arithmetic, and selections, for example `f(let { yield 1; })` or
 `let { "a b" = 1; yield { inherit "a b"; }; }`. The names `fn`, `yield`, `or`,
 `__curPos`, and `__nxc_*` remain reserved in local bindings and plain inheritance,
 including when quoted. Lambda parameters still require supported identifiers.
+The first component of a `let` binding must be a static name, including a direct
+literal such as `${"x"}`. Later components can be computed: `a.${name} = value;`.
+Inheritance also requires static names and accepts `inherit ${"x"};`.
 
 Use `with(context, expression)` to make attributes from a context available
 inside an expression:
@@ -277,8 +294,7 @@ Native attrset updates (`//`) round-trip through the reserved internal form
 `__nxc_update(a, b)`. This is converter compatibility syntax; the public update
 syntax is still undecided. `//` remains a line comment in nxc.
 
-Dynamic attribute bindings and inheritance names,
-attribute-existence tests (`?`), absolute paths,
+Computed inheritance names, attribute-existence tests (`?`), absolute paths,
 home-relative paths, search paths, and interpolated paths are not implemented yet.
 The older native `let { body = ...; }` syntax is also unsupported.
 Native import currently requires parentheses around `!` expressions
