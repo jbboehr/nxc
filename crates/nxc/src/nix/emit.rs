@@ -50,6 +50,7 @@ fn render(expr: &Expr) -> String {
             path,
             default,
         } => crate::emit::selection(value, path, default.as_deref(), render),
+        Expr::HasAttr { value, path } => crate::emit::has_attr(value, path, render),
         Expr::Lambda { parameter, body } => {
             format!(
                 "({}: {})",

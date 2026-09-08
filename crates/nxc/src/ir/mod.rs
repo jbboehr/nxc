@@ -43,6 +43,11 @@ pub enum Expr {
         path: Vec<AttrName>,
         default: Option<Box<Expr>>,
     },
+    /// Test one complete path without forcing the final attribute's value.
+    HasAttr {
+        value: Box<Expr>,
+        path: Vec<AttrName>,
+    },
     Lambda {
         parameter: Pattern,
         body: Box<Expr>,
@@ -358,11 +363,7 @@ impl Expr {
                         }
                     }
                 }
-                Self::Select {
-                    value,
-                    path,
-                    default,
-                } => {
+                Self::Select { value, path, .. } | Self::HasAttr { value, path } => {
                     validate_path_length(path.len(), &mut count).map_err(error)?;
                     for name in path {
                         match name {
@@ -373,7 +374,11 @@ impl Expr {
                         }
                     }
                     pending.push((value, depth + 1));
-                    if let Some(default) = default {
+                    if let Self::Select {
+                        default: Some(default),
+                        ..
+                    } = expr
+                    {
                         pending.push((default, depth + 1));
                     }
                 }

@@ -78,7 +78,7 @@ fn malformed_and_unsupported_strings_remain_lossless_errors() {
         "\"a\0b\"",
         r#"{ "${}" = 1; }"#,
         r#"s."${}""#,
-        r#""${a ? b}""#,
+        r#""${a ?}""#,
     ] {
         let parsed = syntax::parse(source);
         assert_eq!(parsed.syntax().unwrap().to_string(), source);

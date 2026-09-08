@@ -103,7 +103,7 @@ fn malformed_attributes_are_rejected_losslessly() {
         "{ ${} = 1; }",
         "s.${}",
         "s.\"${}\"",
-        "s ? x",
+        "s ?",
         "let x = 1; in x",
     ] {
         let parsed = syntax::parse(source);

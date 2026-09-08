@@ -268,7 +268,7 @@ fn lower_with_string_context(
         }),
         ast::Expr::Select(select) => Ok(Expr::Select {
             value: Box::new(child(select.expr())?),
-            path: lower_selection_path(select.attrpath(), depth)?,
+            path: lower_lookup_path(select.attrpath(), depth)?,
             default: select
                 .default_expr()
                 .map(|value| {
@@ -284,6 +284,10 @@ fn lower_with_string_context(
                     lower(value, depth + 1).map(Box::new)
                 })
                 .transpose()?,
+        }),
+        ast::Expr::HasAttr(has_attr) => Ok(Expr::HasAttr {
+            value: Box::new(operator_child(has_attr.expr())?),
+            path: lower_lookup_path(has_attr.attrpath(), depth)?,
         }),
         ast::Expr::Lambda(lambda) => {
             let name = |ident: Option<ast::Ident>| {
@@ -482,7 +486,7 @@ fn lower_list(list: ast::List, depth: usize) -> Result<Expr, Diagnostic> {
     ))
 }
 
-fn lower_selection_path(
+fn lower_lookup_path(
     path: Option<ast::Attrpath>,
     depth: usize,
 ) -> Result<Vec<AttrName>, Diagnostic> {

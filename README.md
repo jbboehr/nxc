@@ -9,10 +9,10 @@ A C/Rust-flavored concrete syntax for Nix with unchanged Nix evaluation semantic
 
 The current subset supports identifiers, integer literals, parentheses,
 arithmetic, comparison and Boolean operators, curried function calls, and lambdas
-with simple or attribute-pattern parameters. Attrsets and attribute
-selections, lists, `let`, `with`, `if`, and `assert` expressions, double-quoted and
-indented strings, string interpolation, and literal relative paths are also
-supported.
+with simple or attribute-pattern parameters. Attrsets, attribute selections and
+existence checks, lists, `let`, `with`, `if`, and `assert` expressions,
+double-quoted and indented strings, string interpolation, and literal relative
+paths are also supported.
 
 For example, `f(1 + 2, x)` converts to native Nix equivalent to `f (1 + 2) x`.
 Conversion preserves the expression's structure and leaves evaluation to Nix.
@@ -122,6 +122,19 @@ interpolation performs Nix's usual string coercion first. Conversion preserves
 this distinction and may print `values."${name}"` as `values.${"${name}"}`.
 The `or` default applies to the whole path; a missing component skips any
 remaining key expressions. Conversion does not evaluate keys or defaults.
+
+Use `?` to test whether an attribute path exists:
+
+```nix
+values ? settings.theme
+values ? ${name}.enabled
+```
+
+The result is a Boolean. A missing component or a non-set intermediate value
+returns `false`; an existing final attribute returns `true` without evaluating
+its value. Nix evaluates intermediate values as needed and skips later key
+expressions after a missing component. Dynamic keys follow the same string rules
+as selections. Conversion does not evaluate the set or its keys.
 
 Bindings also accept dynamic names and mixed dotted paths:
 
@@ -294,7 +307,7 @@ Native attrset updates (`//`) round-trip through the reserved internal form
 `__nxc_update(a, b)`. This is converter compatibility syntax; the public update
 syntax is still undecided. `//` remains a line comment in nxc.
 
-Computed inheritance names, attribute-existence tests (`?`), absolute paths,
+Computed inheritance names, absolute paths,
 home-relative paths, search paths, and interpolated paths are not implemented yet.
 The older native `let { body = ...; }` syntax is also unsupported.
 Native import currently requires parentheses around `!` expressions

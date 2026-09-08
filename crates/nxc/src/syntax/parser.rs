@@ -156,12 +156,12 @@ pub(super) fn parse(tokens: &[Token], source_len: usize) -> (Option<Node>, Vec<D
                 .clone()
                 .map_with(|key, e| Node::new(K::AttrName, e.span(), vec![key])),
         ));
-        let selection_path = attr_name
+        let attribute_path = attr_name
             .clone()
             .separated_by(just(K::Dot))
             .at_least(1)
             .collect::<Vec<_>>();
-        let assignment = selection_path
+        let assignment = attribute_path
             .clone()
             .then_ignore(just(K::Assign))
             .then(expr.clone())
@@ -323,6 +323,7 @@ pub(super) fn parse(tokens: &[Token], source_len: usize) -> (Option<Node>, Vec<D
                     K::AndAnd,
                     K::OrOr,
                     K::Or,
+                    K::Question,
                     K::Dot,
                 ])
                 .not(),
@@ -411,7 +412,7 @@ pub(super) fn parse(tokens: &[Token], source_len: usize) -> (Option<Node>, Vec<D
             atom.clone()
                 .then(
                     just(K::Dot)
-                        .ignore_then(selection_path.clone())
+                        .ignore_then(attribute_path.clone())
                         .then(just(K::Or).ignore_then(simple).or_not())
                         .or_not(),
                 )
@@ -429,16 +430,17 @@ pub(super) fn parse(tokens: &[Token], source_len: usize) -> (Option<Node>, Vec<D
                 })
         });
         let selection = just(K::Dot)
-            .ignore_then(selection_path)
+            .ignore_then(attribute_path.clone())
             .then(just(K::Or).ignore_then(simple).or_not());
+        let has_attr = just(K::Question).ignore_then(attribute_path);
         let operators = atom.pratt((
-            postfix(10, arguments, |function, arguments: Vec<Node>, e| {
+            postfix(11, arguments, |function, arguments: Vec<Node>, e| {
                 let mut children = vec![function];
                 children.extend(arguments);
                 Node::new(K::CallExpr, e.span(), children)
             }),
             postfix(
-                10,
+                11,
                 selection,
                 |value, (path, default): (Vec<Node>, Option<Node>), e| {
                     let mut children = vec![value];
@@ -447,8 +449,14 @@ pub(super) fn parse(tokens: &[Token], source_len: usize) -> (Option<Node>, Vec<D
                     Node::new(K::SelectExpr, e.span(), children)
                 },
             ),
-            prefix(9, just(K::Minus), |_, operand, e| {
+            prefix(10, just(K::Minus), |_, operand, e| {
                 Node::new(K::NegateExpr, e.span(), vec![operand])
+            }),
+            // A path is not an expression operand; repeated checks associate left.
+            postfix(9, has_attr, |value, path: Vec<Node>, e| {
+                let mut children = vec![value];
+                children.extend(path);
+                Node::new(K::HasAttrExpr, e.span(), children)
             }),
             infix(right(8), just(K::PlusPlus), |lhs, _, rhs, e| {
                 Node::new(K::BinaryExpr, e.span(), vec![lhs, rhs])

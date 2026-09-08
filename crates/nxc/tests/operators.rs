@@ -185,7 +185,7 @@ fn malformed_and_unsupported_operator_inputs_stay_lossless_and_recover() {
         "a <| b",
         "<nixpkgs>",
         "a <b> c",
-        "a ? b",
+        "a ?",
         "a || if b then c else d",
         "!if a then b else c",
         "a == x => x",

@@ -80,6 +80,7 @@ fn render(expr: &Expr) -> String {
             path,
             default,
         } => super::selection(value, path, default.as_deref(), render),
+        Expr::HasAttr { value, path } => super::has_attr(value, path, render),
         Expr::Lambda { parameter, body } => {
             let spelling = super::pattern(parameter, render);
             let parameter = match parameter {

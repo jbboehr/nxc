@@ -153,3 +153,12 @@ pub(crate) fn pattern(
         }
     }
 }
+
+/// Preserve traversal order and the distinction between missing and lazy values.
+pub(crate) fn has_attr(
+    value: &crate::ir::Expr,
+    path: &[crate::ir::AttrName],
+    render: fn(&crate::ir::Expr) -> String,
+) -> String {
+    format!("({} ? {})", render(value), attribute_path(path, render))
+}

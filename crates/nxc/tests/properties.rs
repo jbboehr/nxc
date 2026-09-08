@@ -110,6 +110,22 @@ fn expressions() -> impl Strategy<Value = Expr> {
                         default: default.map(Box::new),
                     }
                 }),
+            (
+                inner.clone(),
+                prop::collection::vec(
+                    prop_oneof![
+                        attribute_names().prop_map(AttrName::Static),
+                        inner
+                            .clone()
+                            .prop_map(|key| AttrName::Dynamic(Box::new(key))),
+                    ],
+                    1..4,
+                ),
+            )
+                .prop_map(|(value, path)| Expr::HasAttr {
+                    value: Box::new(value),
+                    path,
+                }),
             inner.clone().prop_map(|body| Expr::Lambda {
                 parameter: Pattern::Ident("x".into()),
                 body: Box::new(body),

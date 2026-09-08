@@ -94,7 +94,7 @@ fn implication_keeps_nxc_arrow_reserved_and_validates_unevaluated_operands() {
         "false -> /path",
         "false -> __nxc_bad",
         "false -> 9223372036854775808",
-        "true -> (a ? b)",
+        "true -> /unsupported/path",
         "/path -> true",
         "__curPos -> true",
         "false -> 1.5",

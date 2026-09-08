@@ -21,7 +21,8 @@ The current subset implements identifiers, integers, parentheses, arithmetic,
 comparison and Boolean operators, calls, and simple/attribute-pattern lambdas in
 both conversion directions.
 It also includes attrsets with static/dynamic names, dotted bindings,
-inheritance, and static/dynamic selections with defaults, lists and concatenation,
+inheritance, static/dynamic selections with defaults, attribute-existence checks,
+lists and concatenation,
 `let`, `with`, `if`, and `assert` expressions,
 double-quoted/indented strings, interpolation, literal relative paths, native
 implication normalization, and native attrset updates through a reserved compatibility form.
@@ -55,6 +56,7 @@ short-circuit Boolean operators, implication normalization, comparison values
 and lazy collection equality,
 shallow attrset updates, operand forcing and lazy overridden attributes,
 dynamic selection keys, coercion and lazy path traversal,
+attribute existence, unforced final values, and missing-path short circuiting,
 dynamic binding names, null-key omission and runtime collisions,
 argument validation, recursive set merges, local binding and `with` scope, inheritance,
 lazy conditional branches, assertion failures and evaluation order,
@@ -124,7 +126,7 @@ Discovery errors abort before processing because the file list is incomplete.
 
 Native parse counts include the library's compatibility and resource preflight
 checks. Lowering is counted separately, so valid unsupported forms such as
-interpolated paths and attribute-existence tests are distinguishable from parse
+interpolated paths and noninteger literals are distinguishable from parse
 failures. Small temporary corpora in the xtask tests exercise reporting and failure handling; no nixpkgs
 checkout is required by the test suite or vendored into this repository.
 
@@ -299,6 +301,17 @@ missing prefix when a default is present. Dynamic children count toward the
 same semantic node, byte, and depth bounds as other expressions, even if lazy.
 Selection CST keys sit directly under `SelectExpr` to bound the physical tree
 depth of nested key expressions; assignment keys use the same arrangement.
+
+`Expr::HasAttr` shares ordered `AttrName` paths and validation with selections.
+It emits a native `?` expression in both dialects, retaining the whole path so
+Nix controls key evaluation, intermediate forcing, and missing-path short circuiting.
+The final attribute value stays lazy; no conversion to nested builtins calls or
+compile-time existence lookup occurs. The parser places this path suffix between
+arithmetic negation and list concatenation; chained checks associate left as in
+the native parser. Its CST keys sit directly under `HasAttrExpr`, and malformed
+`?` suffixes participate in item recovery. Lambda parameter defaults retain their
+separate `?` delimiter.
+
 The lexer recognizes `${...}` outside strings using the same interpolation mode.
 The parser uses Nix's simple-expression precedence for `or`; emitters parenthesize fallback
 expressions to preserve the IR. Attribute paths are bounded, and dotted bindings

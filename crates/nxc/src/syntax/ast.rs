@@ -132,12 +132,13 @@ impl Expression {
             }),
             K::SelectExpr => Ok(Expr::Select {
                 value: Box::new(child()?),
-                path: lower_selection_path(&self.0, depth)?,
+                path: lower_lookup_path(&self.0, depth)?,
                 default: children
                     .next()
                     .map(|expr| expr.lower(depth + 1).map(Box::new))
                     .transpose()?,
             }),
+            K::HasAttrExpr => lower_has_attr(&self.0, depth),
             K::NegateExpr => Ok(Expr::Negate(Box::new(child()?))),
             K::NotExpr => Ok(Expr::Not(Box::new(child()?))),
             K::LambdaExpr => {
@@ -192,6 +193,21 @@ impl Expression {
             _ => Err(error("cannot lower an erroneous expression")),
         }
     }
+}
+
+// Keep path collection out of the frame used by every recursive expression.
+fn lower_has_attr(node: &SyntaxNode, depth: usize) -> Result<Expr, Diagnostic> {
+    let value = node.children().find_map(Expression::cast).ok_or_else(|| {
+        let span = node.text_range();
+        Diagnostic::new(
+            usize::from(span.start())..usize::from(span.end()),
+            "missing existence operand",
+        )
+    })?;
+    Ok(Expr::HasAttr {
+        value: Box::new(value.lower(depth + 1)?),
+        path: lower_lookup_path(node, depth)?,
+    })
 }
 
 fn lower_bindings(node: &SyntaxNode, depth: usize) -> Result<Vec<Binding>, Diagnostic> {
@@ -277,7 +293,7 @@ fn lower_string(
     crate::string::lower(parts, indented, context).map_err(error)
 }
 
-fn lower_selection_path(node: &SyntaxNode, depth: usize) -> Result<Vec<AttrName>, Diagnostic> {
+fn lower_lookup_path(node: &SyntaxNode, depth: usize) -> Result<Vec<AttrName>, Diagnostic> {
     node.children()
         .filter(|node| node.kind() == K::AttrName)
         .map(|name| lower_attr(&name, depth))

@@ -101,7 +101,7 @@ fn malformed_concatenation_is_lossless_and_recovers_later_items() {
         "[] ++ /path",
         "__nxc_bad ++ []",
         "a -> b",
-        "a ? b",
+        "a ?",
     ] {
         let parsed = syntax::parse(source);
         assert_eq!(parsed.syntax().unwrap().to_string(), source);

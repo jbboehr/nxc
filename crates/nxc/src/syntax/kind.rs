@@ -129,6 +129,7 @@ pub enum SyntaxKind {
     UpdateExpr,
     IfExpr,
     SelectExpr,
+    HasAttrExpr,
     StringExpr,
     ListExpr,
     StringText,
@@ -183,6 +184,7 @@ impl SyntaxKind {
                 | Self::UpdateExpr
                 | Self::IfExpr
                 | Self::SelectExpr
+                | Self::HasAttrExpr
                 | Self::StringExpr
                 | Self::ListExpr
                 | Self::ErrorExpr
@@ -326,6 +328,7 @@ impl rowan::Language for NxcLanguage {
             UpdateExpr,
             IfExpr,
             SelectExpr,
+            HasAttrExpr,
             StringExpr,
             ListExpr,
             StringText,
