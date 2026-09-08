@@ -44,6 +44,7 @@ pub fn emit(expr: &Expr) -> Result<String, Diagnostic> {
 fn render(expr: &Expr) -> String {
     match expr {
         Expr::Integer(value) => value.to_string(),
+        Expr::Float(value) => value.to_string(),
         Expr::Variable(name) => name.clone(),
         // Protect path characters from surrounding unary operators and selections.
         Expr::RelativePath(path) => format!("({path})"),

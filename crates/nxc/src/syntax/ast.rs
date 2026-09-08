@@ -84,6 +84,7 @@ impl Expression {
                     .map_err(|_| error("integer literal is out of range"))?;
                 Ok(Expr::Integer(value))
             }
+            K::FloatExpr => lower_float(&self.0),
             K::VariableExpr => {
                 let name = self.0.text().to_string();
                 ir::validate_name(&name).map_err(error)?;
@@ -193,6 +194,21 @@ impl Expression {
             _ => Err(error("cannot lower an erroneous expression")),
         }
     }
+}
+
+// Keep literal parsing out of the frame used by every recursive expression.
+fn lower_float(node: &SyntaxNode) -> Result<Expr, Diagnostic> {
+    let range = node.text_range();
+    node.text()
+        .to_string()
+        .parse()
+        .map(Expr::Float)
+        .map_err(|message| {
+            Diagnostic::new(
+                usize::from(range.start())..usize::from(range.end()),
+                message,
+            )
+        })
 }
 
 // Keep path collection out of the frame used by every recursive expression.

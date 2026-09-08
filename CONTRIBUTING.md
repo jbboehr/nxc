@@ -17,7 +17,7 @@ support is provided by `.envrc` (`direnv allow`).
 - `crates/nxc-cli`: the `nxc` executable.
 - `xtask`: development tasks, with a `cargo xtask` alias.
 
-The current subset implements identifiers, integers, parentheses, arithmetic,
+The current subset implements identifiers, integers, floats, parentheses, arithmetic,
 comparison and Boolean operators, calls, and simple/attribute-pattern lambdas in
 both conversion directions.
 It also includes attrsets with static/dynamic names, dotted bindings,
@@ -52,6 +52,7 @@ Tests cover source reconstruction, malformed input, argument recovery, semantic
 round trips, CLI output and error handling, and resource limits. Proptest checks
 arbitrary UTF-8 input and generated semantic expressions. The native Nix oracle
 checks generated syntax, precedence, currying, parameter scope, lazy defaults,
+float type/value preservation, rounding and exact subnormal spellings,
 short-circuit Boolean operators, implication normalization, comparison values
 and lazy collection equality,
 shallow attrset updates, operand forcing and lazy overridden attributes,
@@ -126,7 +127,7 @@ Discovery errors abort before processing because the file list is incomplete.
 
 Native parse counts include the library's compatibility and resource preflight
 checks. Lowering is counted separately, so valid unsupported forms such as
-interpolated paths and noninteger literals are distinguishable from parse
+interpolated paths and search paths are distinguishable from parse
 failures. Small temporary corpora in the xtask tests exercise reporting and failure handling; no nixpkgs
 checkout is required by the test suite or vendored into this repository.
 
@@ -366,6 +367,19 @@ Absolute, home-relative, search, and interpolated paths remain later slices.
 operation, allowing the corpus runner to count parsing and lowering without
 parsing twice. rnix types remain private. `nix::import` still performs both steps
 for callers that only need the IR.
+
+`ir::Float` stores finite, nonnegative binary64 bits, keeping semantic equality
+independent of decimal spelling without admitting NaN or signed literal values.
+Negation remains a separate expression. Both frontends use the same checked
+literal parser; the nxc lexer follows Nix's decimal-point grammar and groups
+dangling exponents into error tokens for item recovery. Emitters retain a decimal
+point even in exponent notation. Subnormal values and the smallest normal value
+use exact decimal expansion to avoid native `strtod` underflow errors. Parsing
+rejects inexact subnormals and conservatively rejects spellings below the smallest
+normal that round up to it, where acceptance depends on libc tininess detection.
+Exact decimal comparison is confined to this boundary; ordinary literals use Rust's binary64
+parser and shortest round-trip formatting. Emitted float bytes share the literal
+byte budget, including long exact subnormal spellings. No arithmetic is folded.
 
 Diagnostics carry byte spans separately from the IR. The nxc CST retains the
 source locations; CLI diagnostics attach the originating file path. Emitters

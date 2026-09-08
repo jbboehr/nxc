@@ -17,6 +17,8 @@ pub enum SyntaxKind {
     Ident,
     #[regex(r"[0-9]+")]
     Integer,
+    #[regex(r"([1-9][0-9]*\.[0-9]*|0?\.[0-9]+)([Ee][+\-]?[0-9]+)?")]
+    Float,
     // A slash within path-shaped text takes precedence over division.
     #[regex(r"[A-Za-z0-9._+\-]+/[A-Za-z0-9._+\-][A-Za-z0-9._+\-/]*")]
     RelativePath,
@@ -111,9 +113,13 @@ pub enum SyntaxKind {
     #[token("${")]
     InterpolationStart,
     InterpolationEnd,
+    // Keep a dangling exponent together so recovery can retain later items.
+    // A valid exponent is longer and therefore wins the Float match above.
+    #[regex(r"([1-9][0-9]*\.[0-9]*|0?\.[0-9]+)[Ee][+\-]?")]
     ErrorToken,
     Root,
     IntegerExpr,
+    FloatExpr,
     VariableExpr,
     RelativePathExpr,
     ParenExpr,
@@ -169,6 +175,7 @@ impl SyntaxKind {
         matches!(
             self,
             Self::IntegerExpr
+                | Self::FloatExpr
                 | Self::VariableExpr
                 | Self::RelativePathExpr
                 | Self::ParenExpr
@@ -197,6 +204,7 @@ impl std::fmt::Display for SyntaxKind {
         let name = match self {
             Self::Ident => "identifier",
             Self::Integer => "integer",
+            Self::Float => "float",
             Self::RelativePath => "relative path",
             Self::LParen => "'('",
             Self::RParen => "')'",
@@ -263,6 +271,7 @@ impl rowan::Language for NxcLanguage {
             BlockComment,
             Ident,
             Integer,
+            Float,
             RelativePath,
             UnsupportedPath,
             LParen,
@@ -313,6 +322,7 @@ impl rowan::Language for NxcLanguage {
             ErrorToken,
             Root,
             IntegerExpr,
+            FloatExpr,
             VariableExpr,
             RelativePathExpr,
             ParenExpr,

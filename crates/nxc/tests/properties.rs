@@ -1,6 +1,6 @@
 use nxc::{
     MAX_DEPTH, MAX_SOURCE_BYTES, MAX_TOKENS, emit,
-    ir::{AttrName, BinaryOp, Binding, Expr, Formal, Pattern, StringPart},
+    ir::{AttrName, BinaryOp, Binding, Expr, Float, Formal, Pattern, StringPart},
     nix, parse_nxc, syntax,
 };
 use proptest::prelude::*;
@@ -28,6 +28,8 @@ fn expressions() -> impl Strategy<Value = Expr> {
             })
         }),
         (0u64..100_000).prop_map(Expr::Integer),
+        (0u64..0x7ff0_0000_0000_0000)
+            .prop_map(|bits| Expr::Float(Float::new(f64::from_bits(bits)).unwrap())),
         (
             prop::sample::select(vec!["./", "../", "dir/"]),
             "[a-zA-Z0-9_+.-]{1,16}"

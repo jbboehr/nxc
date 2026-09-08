@@ -95,7 +95,7 @@ fn malformed_and_unsupported_nxc_is_rejected() {
         "yield",
         "__nxc_unknown(a,b)",
         "__curPos",
-        "1.5",
+        "1.5e+",
         "./foo/",
         "/foo",
         "a/b/",
@@ -114,7 +114,7 @@ fn unsupported_native_forms_are_never_guessed() {
     for source in [
         "",
         "f (",
-        "1.5",
+        "1.5e+",
         "/unsupported/path",
         "./foo/",
         "a +++ b",

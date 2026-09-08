@@ -1,10 +1,14 @@
 // SPDX-License-Identifier: AGPL-3.0-only WITH romic-exception
 
+mod float;
+pub use float::Float;
+
 /// Nix semantics, without source locations, trivia, or redundant parentheses.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Expr {
     /// A nonnegative integer literal, at most `i64::MAX`. Negation is separate.
     Integer(u64),
+    Float(Float),
     Variable(String),
     /// A literal source-relative path, retaining its spelling without resolution.
     RelativePath(String),
@@ -266,6 +270,13 @@ impl Expr {
                     return Err(error("integer literal exceeds the Nix signed 64-bit range"));
                 }
                 Self::Integer(_) => {}
+                Self::Float(value) => {
+                    let bytes = value.to_string().len();
+                    if bytes > crate::MAX_SOURCE_BYTES - literal_bytes {
+                        return Err(error("float literals exceed the source size limit"));
+                    }
+                    literal_bytes += bytes;
+                }
                 Self::Variable(name) => validate_name(name).map_err(error)?,
                 Self::RelativePath(path) => {
                     if path.len() > crate::MAX_SOURCE_BYTES - literal_bytes {

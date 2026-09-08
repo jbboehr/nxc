@@ -7,8 +7,8 @@ Lex Ferrata\
 
 A C/Rust-flavored concrete syntax for Nix with unchanged Nix evaluation semantics.
 
-The current subset supports identifiers, integer literals, parentheses,
-arithmetic, comparison and Boolean operators, curried function calls, and lambdas
+The current subset supports identifiers, integer and floating-point literals,
+parentheses, arithmetic, comparison and Boolean operators, curried function calls, and lambdas
 with simple or attribute-pattern parameters. Attrsets, attribute selections and
 existence checks, lists, `let`, `with`, `if`, and `assert` expressions,
 double-quoted and indented strings, string interpolation, and literal relative
@@ -33,6 +33,11 @@ Identifiers retain Nix's hyphens and apostrophes: `a-b` is one identifier, while
 `a - b` is subtraction. Use spaces around `/` for division: `1 / 2` divides,
 while `1/2` is a relative path. Comments may use `//`, `#`, or `/* ... */`, and
 calls may have a trailing comma. Calls require at least one argument.
+
+Floating-point literals include a decimal point: `1.0`, `.5`, `2.`, and
+`2.5e-3`. Use unary `-` for negative values. Conversion may change a literal's
+spelling while preserving its binary64 value and its floating-point type;
+`1.0` remains distinct from the integer `1`. Arithmetic is left to Nix.
 
 Operators follow [Nix precedence](https://nix.dev/manual/nix/2.34/language/operators).
 Calls and selections bind more tightly than the following groups, listed from
@@ -300,6 +305,10 @@ components. Paths starting with `...` require an explicit `./` prefix, such as
 Inputs are currently limited to 1 MiB, 16,384 non-trivia tokens, and 128 levels of
 parenthesis, brace, bracket, string, interpolation, or semantic-expression nesting.
 Integer literals range from `0` to `9223372036854775807`; negative values use unary `-`.
+Float overflow and inexact subnormal literals are rejected. Exact subnormal
+values are supported, and their emitted decimal spellings can be long.
+Spellings just below the smallest normal value that round up to it are also
+rejected to avoid depending on native libc's underflow-boundary behavior.
 Attribute paths have at most 128 components, and dotted bindings count toward
 semantic nesting. Generated output must fit these limits as well.
 

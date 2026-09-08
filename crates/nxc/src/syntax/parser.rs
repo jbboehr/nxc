@@ -60,6 +60,7 @@ pub(super) fn parse(tokens: &[Token], source_len: usize) -> (Option<Node>, Vec<D
     let expr = recursive(|expr| {
         let integer = just::<_, _, extra::Err<Rich<'_, K>>>(K::Integer)
             .map_with(|_, e| Node::new(K::IntegerExpr, e.span(), vec![]));
+        let float = just(K::Float).map_with(|_, e| Node::new(K::FloatExpr, e.span(), vec![]));
         let variable = just(K::Ident).map_with(|_, e| Node::new(K::VariableExpr, e.span(), vec![]));
         let relative_path =
             just(K::RelativePath).map_with(|_, e| Node::new(K::RelativePathExpr, e.span(), vec![]));
@@ -394,6 +395,7 @@ pub(super) fn parse(tokens: &[Token], source_len: usize) -> (Option<Node>, Vec<D
 
         let atom = choice((
             integer,
+            float,
             variable,
             relative_path,
             paren,

@@ -97,7 +97,7 @@ fn implication_keeps_nxc_arrow_reserved_and_validates_unevaluated_operands() {
         "true -> /unsupported/path",
         "/path -> true",
         "__curPos -> true",
-        "false -> 1.5",
+        "false -> 1.5e+",
         "false -> (a |> b)",
     ] {
         assert!(nix::import(source).is_err(), "accepted {source}");

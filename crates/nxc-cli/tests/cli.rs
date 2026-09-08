@@ -20,6 +20,51 @@ fn balanced_sum(leaves: usize) -> String {
 }
 
 #[test]
+fn floats_roundtrip_through_files_and_range_errors_preserve_output() {
+    let dir = TempDir::new().unwrap();
+    let original = dir.path().join("input.nix");
+    let converted = dir.path().join("converted.nxc");
+    let output = dir.path().join("output.nix");
+    let source = "[ 1.0 .5 1.e100 (-0.0) 1.0000000000000002 ]";
+    fs::write(&original, source).unwrap();
+    for (command, input, output) in [
+        ("from-nix", &original, &converted),
+        ("to-nix", &converted, &output),
+    ] {
+        let result = cli(&[
+            command.as_ref(),
+            input.as_os_str(),
+            "-o".as_ref(),
+            output.as_os_str(),
+        ]);
+        assert!(result.status.success(), "{command}: {result:?}");
+        assert!(result.stdout.is_empty());
+    }
+    assert_eq!(fs::read_to_string(&original).unwrap(), source);
+    assert_eq!(
+        nxc::nix::import(&fs::read_to_string(&output).unwrap()).unwrap(),
+        nxc::nix::import(source).unwrap()
+    );
+
+    fs::write(&original, "/* α */\n 1.0e309").unwrap();
+    fs::write(&output, "keep").unwrap();
+    for command in ["from-nix", "to-nix"] {
+        let result = cli(&[
+            command.as_ref(),
+            original.as_os_str(),
+            "-o".as_ref(),
+            output.as_os_str(),
+        ]);
+        assert!(!result.status.success());
+        assert!(result.stdout.is_empty());
+        let error = String::from_utf8(result.stderr).unwrap();
+        assert!(error.contains("input.nix:2:2:"), "{error}");
+        assert!(error.contains("float"), "{error}");
+        assert_eq!(fs::read_to_string(&output).unwrap(), "keep");
+    }
+}
+
+#[test]
 fn relative_paths_keep_file_based_imports_and_do_not_read_targets_during_conversion() {
     let dir = TempDir::new().unwrap();
     let input = dir.path().join("input.nix");

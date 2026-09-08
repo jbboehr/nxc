@@ -222,8 +222,11 @@ fn lower_with_string_context(
             let token = syntax(&literal)
                 .first_token()
                 .ok_or_else(|| error("missing literal"))?;
+            if token.kind() == K::TOKEN_FLOAT {
+                return Ok(Expr::Float(token.text().parse().map_err(error)?));
+            }
             if token.kind() != K::TOKEN_INTEGER {
-                return Err(error("only integer literals are supported yet"));
+                return Err(error("native literal is not supported yet"));
             }
             let value = token
                 .text()
