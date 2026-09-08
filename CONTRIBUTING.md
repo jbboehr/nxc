@@ -24,7 +24,7 @@ It also includes attrsets with static/dynamic names, dotted bindings,
 inheritance, static/dynamic selections with defaults, attribute-existence checks,
 lists and concatenation,
 `let`, `with`, `if`, and `assert` expressions,
-double-quoted/indented strings, interpolation, literal relative paths, native
+double-quoted/indented strings, interpolation, literal relative paths, search paths, native
 implication normalization, and native attrset updates through a reserved compatibility form.
 `nxc` provides `check`, `to-nix`,
 and `from-nix`.
@@ -53,6 +53,7 @@ round trips, CLI output and error handling, and resource limits. Proptest checks
 arbitrary UTF-8 input and generated semantic expressions. The native Nix oracle
 checks generated syntax, precedence, currying, parameter scope, lazy defaults,
 float type/value preservation, rounding and exact subnormal spellings,
+search-path lookup scope, lazy resolution, and search environment changes,
 short-circuit Boolean operators, implication normalization, comparison values
 and lazy collection equality,
 shallow attrset updates, operand forcing and lazy overridden attributes,
@@ -127,7 +128,7 @@ Discovery errors abort before processing because the file list is incomplete.
 
 Native parse counts include the library's compatibility and resource preflight
 checks. Lowering is counted separately, so valid unsupported forms such as
-interpolated paths and search paths are distinguishable from parse
+interpolated paths and absolute paths are distinguishable from parse
 failures. Small temporary corpora in the xtask tests exercise reporting and failure handling; no nixpkgs
 checkout is required by the test suite or vendored into this repository.
 
@@ -361,7 +362,22 @@ Native oracle tests cover path types, relative resolution, coercion, lazy import
 and path/division boundaries; CLI tests evaluate original and generated files
 in the same directory. Lexical behavior follows the native Nix
 [lexer](https://github.com/NixOS/nix/blob/2.34.8/src/libexpr/lexer.l).
-Absolute, home-relative, search, and interpolated paths remain later slices.
+Absolute, home-relative, and interpolated paths remain later slices.
+
+`Expr::SearchPath` retains the full `<...>` spelling as an unevaluated lookup.
+Both frontends use shared validation for nonempty slash-separated components
+containing Nix's ASCII path characters. This also rejects malformed paths such
+as `<a/>` that rnix tokenizes more permissively than native Nix. Logos recognizes
+complete search paths before comparison operators; incomplete forms use ordinary
+expression diagnostics and item recovery. Both emitters parenthesize lookups,
+and their text shares the aggregate literal-byte budget with other paths.
+Literal lowering uses leaf helpers to preserve stack capacity at the existing
+maximum expression depth in both frontends.
+No lookup names are normalized and no filesystem lookup runs during conversion.
+Native `<...>` output preserves lexical `__findFile` and `__nixPath` bindings,
+lazy evaluation, and the evaluator's search environment. Native oracle tests
+exercise those bindings; CLI tests change `NIX_PATH` after conversion using
+temporary local targets. The syntax follows Nix's lexer linked above.
 
 `nix::parse` returns an owned `nix::Parsed` wrapper with a separate `lower()`
 operation, allowing the corpus runner to count parsing and lowering without

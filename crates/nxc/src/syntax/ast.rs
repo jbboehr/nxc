@@ -95,6 +95,7 @@ impl Expression {
                 ir::validate_relative_path(&path).map_err(error)?;
                 Ok(Expr::RelativePath(path))
             }
+            K::SearchPathExpr => lower_search_path(&self.0),
             K::ListExpr => Ok(Expr::List(
                 children
                     .map(|item| item.lower(depth + 1))
@@ -194,6 +195,19 @@ impl Expression {
             _ => Err(error("cannot lower an erroneous expression")),
         }
     }
+}
+
+// Keep path text and validation out of every recursive expression's frame.
+fn lower_search_path(node: &SyntaxNode) -> Result<Expr, Diagnostic> {
+    let path = node.text().to_string();
+    ir::validate_search_path(&path).map_err(|message| {
+        let range = node.text_range();
+        Diagnostic::new(
+            usize::from(range.start())..usize::from(range.end()),
+            message,
+        )
+    })?;
+    Ok(Expr::SearchPath(path))
 }
 
 // Keep literal parsing out of the frame used by every recursive expression.

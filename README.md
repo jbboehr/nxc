@@ -11,7 +11,7 @@ The current subset supports identifiers, integer and floating-point literals,
 parentheses, arithmetic, comparison and Boolean operators, curried function calls, and lambdas
 with simple or attribute-pattern parameters. Attrsets, attribute selections and
 existence checks, lists, `let`, `with`, `if`, and `assert` expressions,
-double-quoted and indented strings, string interpolation, and literal relative
+double-quoted and indented strings, string interpolation, search paths, and literal relative
 paths are also supported.
 
 For example, `f(1 + 2, x)` converts to native Nix equivalent to `f (1 + 2) x`.
@@ -302,6 +302,15 @@ path, whereas `-(./foo)` is negation. Paths cannot have trailing slashes or empt
 components. Paths starting with `...` require an explicit `./` prefix, such as
 `./.../foo`.
 
+Search paths such as `<nixpkgs>` and `<nixpkgs/lib>` work in both conversion
+directions, including calls such as `import(<nixpkgs>)`. Conversion preserves the
+lookup name verbatim and does not resolve it or require its target to exist.
+Nix resolves the generated lookup when it is evaluated, using that evaluation's
+search path. Keep the same search-path environment when the original and
+generated files should find the same targets. Components may contain ASCII
+letters, digits, `.`, `_`, `-`, and `+`; empty components and interpolation are
+not allowed.
+
 Inputs are currently limited to 1 MiB, 16,384 non-trivia tokens, and 128 levels of
 parenthesis, brace, bracket, string, interpolation, or semantic-expression nesting.
 Integer literals range from `0` to `9223372036854775807`; negative values use unary `-`.
@@ -317,7 +326,7 @@ Native attrset updates (`//`) round-trip through the reserved internal form
 syntax is still undecided. `//` remains a line comment in nxc.
 
 Computed inheritance names, absolute paths,
-home-relative paths, search paths, and interpolated paths are not implemented yet.
+home-relative paths and interpolated paths are not implemented yet.
 The older native `let { body = ...; }` syntax is also unsupported.
 Native import currently requires parentheses around `!` expressions
 nested inside arithmetic or concatenation, such as `-(!x)` or `a ++ (!b)`.

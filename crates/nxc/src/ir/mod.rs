@@ -12,6 +12,8 @@ pub enum Expr {
     Variable(String),
     /// A literal source-relative path, retaining its spelling without resolution.
     RelativePath(String),
+    /// An unresolved search-path expression, including its `<...>` delimiters.
+    SearchPath(String),
     /// Decoded parts, with no empty or adjacent literals. An empty vector is "".
     String(Vec<StringPart>),
     /// Ordered, unevaluated elements; nesting is preserved.
@@ -229,6 +231,24 @@ fn validate_scoped_name(name: &str) -> Result<(), &'static str> {
     Ok(())
 }
 
+pub(crate) fn validate_search_path(path: &str) -> Result<(), &'static str> {
+    let valid = path
+        .strip_prefix('<')
+        .and_then(|text| text.strip_suffix('>'))
+        .is_some_and(|text| {
+            text.split('/').all(|part| {
+                !part.is_empty()
+                    && part.bytes().all(|c| {
+                        c.is_ascii_alphanumeric() || matches!(c, b'.' | b'_' | b'-' | b'+')
+                    })
+            })
+        });
+    if !valid {
+        return Err("expected a search path with nonempty components inside '<...>'");
+    }
+    Ok(())
+}
+
 pub(crate) fn validate_relative_path(path: &str) -> Result<(), &'static str> {
     // rnix recognizes a leading ellipsis before checking for a longer path.
     // Keep emitted literals readable by both frontends without rewriting them.
@@ -283,6 +303,13 @@ impl Expr {
                         return Err(error("path literals exceed the source size limit"));
                     }
                     validate_relative_path(path).map_err(error)?;
+                    literal_bytes += path.len();
+                }
+                Self::SearchPath(path) => {
+                    if path.len() > crate::MAX_SOURCE_BYTES - literal_bytes {
+                        return Err(error("path literals exceed the source size limit"));
+                    }
+                    validate_search_path(path).map_err(error)?;
                     literal_bytes += path.len();
                 }
                 Self::List(items) => {

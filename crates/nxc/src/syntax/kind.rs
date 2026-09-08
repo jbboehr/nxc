@@ -22,6 +22,8 @@ pub enum SyntaxKind {
     // A slash within path-shaped text takes precedence over division.
     #[regex(r"[A-Za-z0-9._+\-]+/[A-Za-z0-9._+\-][A-Za-z0-9._+\-/]*")]
     RelativePath,
+    #[regex(r"<[A-Za-z0-9._+\-]+(/[A-Za-z0-9._+\-]+)*>")]
+    SearchPath,
     #[regex(r"/[A-Za-z0-9._+\-][A-Za-z0-9._+\-/]*")]
     #[regex(r"~/[A-Za-z0-9._+\-/]*")]
     UnsupportedPath,
@@ -122,6 +124,7 @@ pub enum SyntaxKind {
     FloatExpr,
     VariableExpr,
     RelativePathExpr,
+    SearchPathExpr,
     ParenExpr,
     CallExpr,
     NegateExpr,
@@ -178,6 +181,7 @@ impl SyntaxKind {
                 | Self::FloatExpr
                 | Self::VariableExpr
                 | Self::RelativePathExpr
+                | Self::SearchPathExpr
                 | Self::ParenExpr
                 | Self::CallExpr
                 | Self::NegateExpr
@@ -206,6 +210,7 @@ impl std::fmt::Display for SyntaxKind {
             Self::Integer => "integer",
             Self::Float => "float",
             Self::RelativePath => "relative path",
+            Self::SearchPath => "search path",
             Self::LParen => "'('",
             Self::RParen => "')'",
             Self::LBracket => "'['",
@@ -273,6 +278,7 @@ impl rowan::Language for NxcLanguage {
             Integer,
             Float,
             RelativePath,
+            SearchPath,
             UnsupportedPath,
             LParen,
             RParen,
@@ -325,6 +331,7 @@ impl rowan::Language for NxcLanguage {
             FloatExpr,
             VariableExpr,
             RelativePathExpr,
+            SearchPathExpr,
             ParenExpr,
             CallExpr,
             NegateExpr,

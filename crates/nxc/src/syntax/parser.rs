@@ -64,6 +64,8 @@ pub(super) fn parse(tokens: &[Token], source_len: usize) -> (Option<Node>, Vec<D
         let variable = just(K::Ident).map_with(|_, e| Node::new(K::VariableExpr, e.span(), vec![]));
         let relative_path =
             just(K::RelativePath).map_with(|_, e| Node::new(K::RelativePathExpr, e.span(), vec![]));
+        let search_path =
+            just(K::SearchPath).map_with(|_, e| Node::new(K::SearchPathExpr, e.span(), vec![]));
         let paren = expr
             .clone()
             .delimited_by(just(K::LParen), just(K::RParen))
@@ -398,6 +400,7 @@ pub(super) fn parse(tokens: &[Token], source_len: usize) -> (Option<Node>, Vec<D
             float,
             variable,
             relative_path,
+            search_path,
             paren,
             attrset,
             let_expr,

@@ -218,6 +218,7 @@ fn lower_with_string_context(
             ir::validate_relative_path(&path).map_err(error)?;
             Ok(Expr::RelativePath(path))
         }
+        ast::Expr::PathSearch(path) => lower_search_path(path),
         ast::Expr::Literal(literal) => {
             let token = syntax(&literal)
                 .first_token()
@@ -340,6 +341,19 @@ fn lower_with_string_context(
             syntax(&other).kind()
         ))),
     }
+}
+
+// Keep literal collection out of the recursive importer frame.
+fn lower_search_path(path: ast::PathSearch) -> Result<Expr, Diagnostic> {
+    let range = syntax(&path).text_range();
+    let path = syntax(&path).text().to_string();
+    ir::validate_search_path(&path).map_err(|message| {
+        Diagnostic::new(
+            usize::from(range.start())..usize::from(range.end()),
+            message,
+        )
+    })?;
+    Ok(Expr::SearchPath(path))
 }
 
 // Keep binary construction out of the recursive lower frame so adding an
