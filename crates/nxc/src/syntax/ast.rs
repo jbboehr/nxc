@@ -96,6 +96,7 @@ impl Expression {
                 Ok(Expr::RelativePath(path))
             }
             K::SearchPathExpr => lower_search_path(&self.0),
+            K::AbsolutePathExpr => lower_absolute_path(&self.0),
             K::ListExpr => Ok(Expr::List(
                 children
                     .map(|item| item.lower(depth + 1))
@@ -198,6 +199,18 @@ impl Expression {
 }
 
 // Keep path text and validation out of every recursive expression's frame.
+fn lower_absolute_path(node: &SyntaxNode) -> Result<Expr, Diagnostic> {
+    let path = node.text().to_string();
+    ir::validate_absolute_path(&path).map_err(|message| {
+        let range = node.text_range();
+        Diagnostic::new(
+            usize::from(range.start())..usize::from(range.end()),
+            message,
+        )
+    })?;
+    Ok(Expr::AbsolutePath(path))
+}
+
 fn lower_search_path(node: &SyntaxNode) -> Result<Expr, Diagnostic> {
     let path = node.text().to_string();
     ir::validate_search_path(&path).map_err(|message| {

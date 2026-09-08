@@ -170,7 +170,7 @@ fn malformed_conditionals_are_lossless_and_keep_later_enclosing_items() {
         "if(true, 1, 2)",
         "if (true) { 1 } else { 2 }",
         "if true then @ else 2",
-        "if true then 1 else /foo",
+        "if true then 1 else ~/foo",
         "if true then 1 else __nxc_bad",
         "if __nxc_bad then 1 else 2",
         "if false then __nxc_bad else 1",

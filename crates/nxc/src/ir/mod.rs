@@ -12,6 +12,8 @@ pub enum Expr {
     Variable(String),
     /// A literal source-relative path, retaining its spelling without resolution.
     RelativePath(String),
+    /// A literal absolute path, retaining its spelling without filesystem access.
+    AbsolutePath(String),
     /// An unresolved search-path expression, including its `<...>` delimiters.
     SearchPath(String),
     /// Decoded parts, with no empty or adjacent literals. An empty vector is "".
@@ -235,16 +237,25 @@ pub(crate) fn validate_search_path(path: &str) -> Result<(), &'static str> {
     let valid = path
         .strip_prefix('<')
         .and_then(|text| text.strip_suffix('>'))
-        .is_some_and(|text| {
-            text.split('/').all(|part| {
-                !part.is_empty()
-                    && part.bytes().all(|c| {
-                        c.is_ascii_alphanumeric() || matches!(c, b'.' | b'_' | b'-' | b'+')
-                    })
-            })
-        });
+        .is_some_and(valid_path_components);
     if !valid {
         return Err("expected a search path with nonempty components inside '<...>'");
+    }
+    Ok(())
+}
+
+fn valid_path_components(path: &str) -> bool {
+    path.split('/').all(|part| {
+        !part.is_empty()
+            && part
+                .bytes()
+                .all(|c| c.is_ascii_alphanumeric() || matches!(c, b'.' | b'_' | b'-' | b'+'))
+    })
+}
+
+pub(crate) fn validate_absolute_path(path: &str) -> Result<(), &'static str> {
+    if !path.strip_prefix('/').is_some_and(valid_path_components) {
+        return Err("expected a literal absolute path with nonempty components");
     }
     Ok(())
 }
@@ -255,14 +266,7 @@ pub(crate) fn validate_relative_path(path: &str) -> Result<(), &'static str> {
     if path.starts_with("...") {
         return Err("relative paths starting with '...' require a './' prefix");
     }
-    if !path.contains('/')
-        || path.starts_with('/')
-        || path.ends_with('/')
-        || path.contains("//")
-        || !path
-            .bytes()
-            .all(|c| c.is_ascii_alphanumeric() || matches!(c, b'.' | b'_' | b'-' | b'+' | b'/'))
-    {
+    if !path.contains('/') || !valid_path_components(path) {
         return Err("expected a literal relative path with nonempty components");
     }
     Ok(())
@@ -310,6 +314,13 @@ impl Expr {
                         return Err(error("path literals exceed the source size limit"));
                     }
                     validate_search_path(path).map_err(error)?;
+                    literal_bytes += path.len();
+                }
+                Self::AbsolutePath(path) => {
+                    if path.len() > crate::MAX_SOURCE_BYTES - literal_bytes {
+                        return Err(error("path literals exceed the source size limit"));
+                    }
+                    validate_absolute_path(path).map_err(error)?;
                     literal_bytes += path.len();
                 }
                 Self::List(items) => {

@@ -133,7 +133,7 @@ fn malformed_updates_are_lossless_and_preserve_later_enclosing_items() {
         "let { inherit (s) __nxc_update; yield 1; }",
         "__nxc_update_extra(a, b)",
         "__nxc_update-suffix(a, b)",
-        "__nxc_update({}, /path)",
+        "__nxc_update({}, ~/path)",
         "__nxc_update(__nxc_bad, {})",
         "__nxc_update({ a = 1; a = 2; }, { a = 3; })",
     ] {

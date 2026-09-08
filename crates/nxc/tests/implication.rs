@@ -91,11 +91,11 @@ fn implication_keeps_nxc_arrow_reserved_and_validates_unevaluated_operands() {
         assert!(parsed.lower().is_err(), "accepted {source}");
     }
     for source in [
-        "false -> /path",
+        "false -> ~/path",
         "false -> __nxc_bad",
         "false -> 9223372036854775808",
-        "true -> /unsupported/path",
-        "/path -> true",
+        "true -> ~/unsupported/path",
+        "~/path -> true",
         "__curPos -> true",
         "false -> 1.5e+",
         "false -> (a |> b)",

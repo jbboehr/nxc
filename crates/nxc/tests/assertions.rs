@@ -137,7 +137,7 @@ fn malformed_assertions_are_lossless_and_recovery_keeps_later_expressions() {
         "assert => 1",
         "{ assert = 1; }",
         "s.assert",
-        "assert(false, /foo)",
+        "assert(false, ~/foo)",
         "assert(__nxc_bad, 1)",
         "assert(false, __nxc_bad)",
     ] {

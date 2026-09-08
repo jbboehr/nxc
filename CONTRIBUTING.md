@@ -24,7 +24,7 @@ It also includes attrsets with static/dynamic names, dotted bindings,
 inheritance, static/dynamic selections with defaults, attribute-existence checks,
 lists and concatenation,
 `let`, `with`, `if`, and `assert` expressions,
-double-quoted/indented strings, interpolation, literal relative paths, search paths, native
+double-quoted/indented strings, interpolation, literal relative/absolute paths, search paths, native
 implication normalization, and native attrset updates through a reserved compatibility form.
 `nxc` provides `check`, `to-nix`,
 and `from-nix`.
@@ -54,6 +54,7 @@ arbitrary UTF-8 input and generated semantic expressions. The native Nix oracle
 checks generated syntax, precedence, currying, parameter scope, lazy defaults,
 float type/value preservation, rounding and exact subnormal spellings,
 search-path lookup scope, lazy resolution, and search environment changes,
+absolute-path spelling, targets independent of file location, and path/division boundaries,
 short-circuit Boolean operators, implication normalization, comparison values
 and lazy collection equality,
 shallow attrset updates, operand forcing and lazy overridden attributes,
@@ -128,7 +129,7 @@ Discovery errors abort before processing because the file list is incomplete.
 
 Native parse counts include the library's compatibility and resource preflight
 checks. Lowering is counted separately, so valid unsupported forms such as
-interpolated paths and absolute paths are distinguishable from parse
+interpolated paths and home-relative paths are distinguishable from parse
 failures. Small temporary corpora in the xtask tests exercise reporting and failure handling; no nixpkgs
 checkout is required by the test suite or vendored into this repository.
 
@@ -362,7 +363,19 @@ Native oracle tests cover path types, relative resolution, coercion, lazy import
 and path/division boundaries; CLI tests evaluate original and generated files
 in the same directory. Lexical behavior follows the native Nix
 [lexer](https://github.com/NixOS/nix/blob/2.34.8/src/libexpr/lexer.l).
-Absolute, home-relative, and interpolated paths remain later slices.
+Home-relative and interpolated paths remain later slices.
+
+`Expr::AbsolutePath` likewise retains literal text without resolving or normalizing
+it. All three path variants share component validation; absolute paths require
+one leading slash and relative paths reject it. Logos preserves path/division
+boundaries, including `/a/2` as one path, `1 /2` as native application, and
+`1 / 2` as division. Absolute-path lowering uses leaf helpers in both frontends
+to preserve recursive stack capacity. Emitters parenthesize these literals and
+count their bytes and output tokens against the existing limits. Tests cover
+lossless error recovery, malformed and deferred path forms, public IR validation,
+exact resource boundaries, native values and lazy failures. CLI tests create
+targets after conversion and evaluate from different file locations and working
+directories. Generated semantic-expression properties include absolute paths.
 
 `Expr::SearchPath` retains the full `<...>` spelling as an unevaluated lookup.
 Both frontends use shared validation for nonempty slash-separated components

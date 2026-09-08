@@ -109,7 +109,7 @@ fn invalid_and_deferred_paths_are_rejected_and_recovery_retains_later_items() {
         "./foo/",
         "./foo//bar",
         "./a/*comment*/",
-        "/foo",
+        "/foo/",
         "~/foo",
         "<nixpkgs/>",
         "./foo${x}",

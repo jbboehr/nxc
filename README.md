@@ -11,8 +11,8 @@ The current subset supports identifiers, integer and floating-point literals,
 parentheses, arithmetic, comparison and Boolean operators, curried function calls, and lambdas
 with simple or attribute-pattern parameters. Attrsets, attribute selections and
 existence checks, lists, `let`, `with`, `if`, and `assert` expressions,
-double-quoted and indented strings, string interpolation, search paths, and literal relative
-paths are also supported.
+double-quoted and indented strings, string interpolation, search paths, and literal
+relative and absolute paths are also supported.
 
 For example, `f(1 + 2, x)` converts to native Nix equivalent to `f (1 + 2) x`.
 Conversion preserves the expression's structure and leaves evaluation to Nix.
@@ -302,6 +302,14 @@ path, whereas `-(./foo)` is negation. Paths cannot have trailing slashes or empt
 components. Paths starting with `...` require an explicit `./` prefix, such as
 `./.../foo`.
 
+Literal absolute paths such as `/etc/nixos/configuration.nix` work in both
+directions, including `import(/etc/nixos/configuration.nix)`. Conversion retains
+their spelling, including `.` and `..` components, without accessing the target.
+They keep the same target when the generated Nix file moves. Use `/.` for the
+root directory; a bare `/`, trailing slashes, and empty components are invalid.
+Use spaces around division: `1 / 2` divides, while native Nix reads `1 /2` as
+function application to the absolute path `/2`, written `1(/2)` in nxc.
+
 Search paths such as `<nixpkgs>` and `<nixpkgs/lib>` work in both conversion
 directions, including calls such as `import(<nixpkgs>)`. Conversion preserves the
 lookup name verbatim and does not resolve it or require its target to exist.
@@ -325,8 +333,8 @@ Native attrset updates (`//`) round-trip through the reserved internal form
 `__nxc_update(a, b)`. This is converter compatibility syntax; the public update
 syntax is still undecided. `//` remains a line comment in nxc.
 
-Computed inheritance names, absolute paths,
-home-relative paths and interpolated paths are not implemented yet.
+Computed inheritance names, home-relative paths and interpolated paths are not
+implemented yet.
 The older native `let { body = ...; }` syntax is also unsupported.
 Native import currently requires parentheses around `!` expressions
 nested inside arithmetic or concatenation, such as `-(!x)` or `a ++ (!b)`.
