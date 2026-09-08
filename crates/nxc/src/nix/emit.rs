@@ -21,6 +21,7 @@ fn render(expr: &Expr) -> String {
         | Expr::HomePath(path)
         | Expr::SearchPath(path) => format!("({path})"),
         Expr::String(parts) => crate::emit::string(parts, render),
+        Expr::InterpolatedPath(parts) => crate::emit::interpolated_path(parts, render),
         // Every non-simple expression is already parenthesized by render.
         Expr::List(items) => format!(
             "[{}]",

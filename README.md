@@ -11,7 +11,7 @@ The current subset supports identifiers, integer and floating-point literals,
 parentheses, arithmetic, comparison and Boolean operators, curried function calls, and lambdas
 with simple or attribute-pattern parameters. Attrsets, attribute selections and
 existence checks, lists, `let`, `with`, `if`, and `assert` expressions,
-double-quoted and indented strings, string interpolation, search paths, and literal
+double-quoted and indented strings, string interpolation, search paths, and
 relative, absolute, and home-relative paths are also supported.
 
 For example, `f(1 + 2, x)` converts to native Nix equivalent to `f (1 + 2) x`.
@@ -320,6 +320,26 @@ such as `~alice/file` are invalid. Nix rejects home-relative paths in
 [pure evaluation](https://nix.dev/manual/nix/2.34/language/syntax#path), including
 paths in unused branches.
 
+Relative, absolute, and home-relative paths can contain `${...}` interpolation:
+
+```nix
+let {
+    name = "example";
+    yield import(./packages/${name}/default.nix);
+}
+```
+
+These expressions remain paths, and conversion preserves the literal fragments
+and embedded expressions. Nix evaluates the interpolation and resolves the path
+when needed. Keep relative paths in the same source directory when evaluating a
+round trip. Conversion does not require targets to exist. As with native Nix,
+there must be a slash before the first interpolation, and a literal trailing slash
+is invalid: use `./${name}`, not `${name}/file` or `./${name}/`.
+Search paths do not support interpolation. Empty literal path components (`//`)
+and relative paths starting with `...` remain unsupported. When applying an
+interpolated path to a home-relative path, native input needs whitespace between
+them, such as `./${name} ~/file`.
+
 Search paths such as `<nixpkgs>` and `<nixpkgs/lib>` work in both conversion
 directions, including calls such as `import(<nixpkgs>)`. Conversion preserves the
 lookup name verbatim and does not resolve it or require its target to exist.
@@ -343,7 +363,7 @@ Native attrset updates (`//`) round-trip through the reserved internal form
 `__nxc_update(a, b)`. This is converter compatibility syntax; the public update
 syntax is still undecided. `//` remains a line comment in nxc.
 
-Computed inheritance names and interpolated paths are not implemented yet.
+Computed inheritance names are not implemented yet.
 The older native `let { body = ...; }` syntax is also unsupported.
 Native import currently requires parentheses around `!` expressions
 nested inside arithmetic or concatenation, such as `-(!x)` or `a ++ (!b)`.

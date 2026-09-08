@@ -28,6 +28,11 @@ pub enum SyntaxKind {
     AbsolutePath,
     #[regex(r"~/[A-Za-z0-9._+\-/]*")]
     HomePath,
+    // Split the delimiter off in the lexer so both pieces retain byte spans.
+    #[regex(r"[A-Za-z0-9._+\-]*/\$\{")]
+    #[token("~/${")]
+    PathStart,
+    PathContent,
     #[token("(")]
     LParen,
     #[token(")")]
@@ -127,6 +132,8 @@ pub enum SyntaxKind {
     RelativePathExpr,
     AbsolutePathExpr,
     HomePathExpr,
+    InterpolatedPathExpr,
+    PathText,
     SearchPathExpr,
     ParenExpr,
     CallExpr,
@@ -186,6 +193,7 @@ impl SyntaxKind {
                 | Self::RelativePathExpr
                 | Self::AbsolutePathExpr
                 | Self::HomePathExpr
+                | Self::InterpolatedPathExpr
                 | Self::SearchPathExpr
                 | Self::ParenExpr
                 | Self::CallExpr
@@ -217,6 +225,8 @@ impl std::fmt::Display for SyntaxKind {
             Self::RelativePath => "relative path",
             Self::AbsolutePath => "absolute path",
             Self::HomePath => "home-relative path",
+            Self::PathStart => "interpolated path prefix",
+            Self::PathContent => "path text",
             Self::SearchPath => "search path",
             Self::LParen => "'('",
             Self::RParen => "')'",
@@ -288,6 +298,8 @@ impl rowan::Language for NxcLanguage {
             SearchPath,
             AbsolutePath,
             HomePath,
+            PathStart,
+            PathContent,
             LParen,
             RParen,
             LBracket,
@@ -341,6 +353,8 @@ impl rowan::Language for NxcLanguage {
             RelativePathExpr,
             AbsolutePathExpr,
             HomePathExpr,
+            InterpolatedPathExpr,
+            PathText,
             SearchPathExpr,
             ParenExpr,
             CallExpr,

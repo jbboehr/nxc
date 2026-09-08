@@ -98,6 +98,7 @@ impl Expression {
             K::SearchPathExpr => lower_search_path(&self.0),
             K::AbsolutePathExpr => lower_absolute_path(&self.0),
             K::HomePathExpr => lower_home_path(&self.0),
+            K::InterpolatedPathExpr => lower_interpolated_path(&self.0, depth),
             K::ListExpr => Ok(Expr::List(
                 children
                     .map(|item| item.lower(depth + 1))
@@ -200,6 +201,37 @@ impl Expression {
 }
 
 // Keep path text and validation out of every recursive expression's frame.
+fn lower_interpolated_path(node: &SyntaxNode, depth: usize) -> Result<Expr, Diagnostic> {
+    let range = node.text_range();
+    let error = |message| {
+        Diagnostic::new(
+            usize::from(range.start())..usize::from(range.end()),
+            message,
+        )
+    };
+    let mut parts = Vec::new();
+    let mut end = range.start();
+    for part in node.children() {
+        // Trivia ends a path. The expression grammar otherwise ignores it,
+        // so do not combine a later standalone interpolation with this path.
+        if part.text_range().start() != end {
+            return Err(error("path fragments must be adjacent"));
+        }
+        end = part.text_range().end();
+        parts.push(match part.kind() {
+            K::PathText => StringPart::Literal(part.text().to_string()),
+            K::StringInterpolation => StringPart::Interpolation(
+                part.children()
+                    .find_map(Expression::cast)
+                    .ok_or_else(|| error("missing path interpolation expression"))?
+                    .lower(depth + 1)?,
+            ),
+            _ => return Err(error("cannot lower an erroneous path part")),
+        });
+    }
+    ir::lower_path(parts).map_err(error)
+}
+
 fn lower_home_path(node: &SyntaxNode) -> Result<Expr, Diagnostic> {
     let path = node.text().to_string();
     ir::validate_home_path(&path).map_err(|message| {

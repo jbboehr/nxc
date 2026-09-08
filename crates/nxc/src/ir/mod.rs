@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-only WITH romic-exception
 
 mod float;
+mod path;
 pub use float::Float;
+pub(crate) use path::lower_path;
 
 /// Nix semantics, without source locations, trivia, or redundant parentheses.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -16,6 +18,10 @@ pub enum Expr {
     AbsolutePath(String),
     /// A literal home-relative path, retaining `~/` without consulting the environment.
     HomePath(String),
+    /// Raw path fragments and unevaluated interpolations. The first literal
+    /// contains the path prefix; literals are nonempty and nonadjacent.
+    /// At least one interpolation is required. No resolution or folding occurs.
+    InterpolatedPath(Vec<StringPart>),
     /// An unresolved search-path expression, including its `<...>` delimiters.
     SearchPath(String),
     /// Decoded parts, with no empty or adjacent literals. An empty vector is "".
@@ -114,7 +120,8 @@ impl From<&str> for AttrName {
     }
 }
 
-/// Interpolations retain their expression and Nix's string coercion/context.
+/// Literal fragments and interpolation expressions. The containing string or
+/// path determines Nix's coercion and context handling.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum StringPart {
     Literal(String),
@@ -345,7 +352,7 @@ impl Expr {
                     }
                     pending.extend(items.iter().map(|item| (item, depth + 1)));
                 }
-                Self::String(parts) => {
+                Self::String(parts) | Self::InterpolatedPath(parts) => {
                     if parts.len() > crate::MAX_TOKENS - count {
                         return Err(error("string parts exceed the node limit"));
                     }
@@ -375,6 +382,9 @@ impl Expr {
                                 previous_literal = false;
                             }
                         }
+                    }
+                    if matches!(expr, Self::InterpolatedPath(_)) {
+                        path::validate_interpolated_path(parts).map_err(error)?;
                     }
                 }
                 Self::AttrSet { bindings, .. } | Self::Let { bindings, .. } => {

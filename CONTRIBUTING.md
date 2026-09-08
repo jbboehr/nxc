@@ -24,7 +24,7 @@ It also includes attrsets with static/dynamic names, dotted bindings,
 inheritance, static/dynamic selections with defaults, attribute-existence checks,
 lists and concatenation,
 `let`, `with`, `if`, and `assert` expressions,
-double-quoted/indented strings, interpolation, literal relative/absolute/home-relative paths,
+double-quoted/indented strings, interpolation, relative/absolute/home-relative paths,
 search paths, native
 implication normalization, and native attrset updates through a reserved compatibility form.
 `nxc` provides `check`, `to-nix`,
@@ -57,6 +57,7 @@ float type/value preservation, rounding and exact subnormal spellings,
 search-path lookup scope, lazy resolution, and search environment changes,
 absolute-path spelling, targets independent of file location, and path/division boundaries,
 home-path environment changes, verbatim dot components, and pure-mode rejection,
+path interpolation, coercion/context rejection, runtime normalization and lazy imports,
 short-circuit Boolean operators, implication normalization, comparison values
 and lazy collection equality,
 shallow attrset updates, operand forcing and lazy overridden attributes,
@@ -131,7 +132,7 @@ Discovery errors abort before processing because the file list is incomplete.
 
 Native parse counts include the library's compatibility and resource preflight
 checks. Lowering is counted separately, so valid unsupported forms such as
-interpolated paths are distinguishable from parse
+`__curPos` references are distinguishable from parse
 failures. Small temporary corpora in the xtask tests exercise reporting and failure handling; no nixpkgs
 checkout is required by the test suite or vendored into this repository.
 
@@ -365,10 +366,9 @@ Native oracle tests cover path types, relative resolution, coercion, lazy import
 and path/division boundaries; CLI tests evaluate original and generated files
 in the same directory. Lexical behavior follows the native Nix
 [lexer](https://github.com/NixOS/nix/blob/2.34.8/src/libexpr/lexer.l).
-Interpolated paths remain a later slice.
 
 `Expr::AbsolutePath` likewise retains literal text without resolving or normalizing
-it. All four path variants share component validation; absolute paths require
+it. Literal path variants share component validation; absolute paths require
 one leading slash and relative paths reject it. Logos preserves path/division
 boundaries, including `/a/2` as one path, `1 /2` as native application, and
 `1 / 2` as division. Absolute-path lowering uses leaf helpers in both frontends
@@ -383,7 +383,7 @@ directories. Generated semantic-expression properties include absolute paths.
 or accessing its target. Both frontends validate nonempty slash-separated components
 after `~/`, use leaf lowering helpers, and share existing resource ceilings. The
 lexer groups malformed trailing/empty components for lossless item recovery;
-bare `~`, named-user forms, and interpolated paths remain errors. Emitters retain
+bare `~` and named-user forms remain errors. Emitters retain
 the literal syntax in parentheses. Replacing it with an absolute path or a
 `getEnv` call would change native behavior: Nix 2.34.8 expands the home prefix at
 parse time, rejects it in pure mode even in unused branches, and preserves dot
@@ -392,6 +392,24 @@ properties and later operations that normalize the path. CLI tests use subproces
 environments to change the home directory after conversion and create targets only
 afterward. The parent process environment is unchanged. Native behavior follows
 the [parser](https://github.com/NixOS/nix/blob/2.34.8/src/libexpr/parser.y).
+
+`Expr::InterpolatedPath` stores raw literal fragments and unevaluated expressions
+using `StringPart`; its containing variant selects path semantics. A path requires
+a literal prefix containing a slash before its first interpolation. Shared
+validation checks the spelling with placeholder components, without evaluating
+interpolations, merging them into literals, resolving targets, or normalizing dot
+components. Fragments and their child expressions share the existing byte, token,
+node, and depth ceilings. The lexer switches between path text and interpolation
+expressions; trivia ends a path and lowering checks fragment adjacency. Native
+import uses rnix's path parts, and both emitters retain native path interpolation
+syntax. Empty literal components remain rejected, including native forms rnix
+handles inconsistently. rnix also absorbs an adjacent home path after an
+interpolated path; unsupported combined text is rejected instead of changing the
+native application. Whitespace between those paths avoids the ambiguity.
+Focused tests cover fragment/operator boundaries, nested interpolation, malformed
+recovery, limits, runtime values/coercion/context, and targets created after CLI
+conversion under changing home environments. Generated-expression properties
+include interpolated paths.
 
 `Expr::SearchPath` retains the full `<...>` spelling as an unevaluated lookup.
 Both frontends use shared validation for nonempty slash-separated components

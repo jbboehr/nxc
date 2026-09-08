@@ -52,6 +52,7 @@ fn render(expr: &Expr) -> String {
         | Expr::HomePath(path)
         | Expr::SearchPath(path) => format!("({path})"),
         Expr::String(parts) => super::string(parts, render),
+        Expr::InterpolatedPath(parts) => super::interpolated_path(parts, render),
         Expr::List(items) => format!(
             "[{}]",
             items.iter().map(render).collect::<Vec<_>>().join(", ")

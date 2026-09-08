@@ -127,7 +127,7 @@ fn invalid_dynamic_bindings_remain_lossless_and_recover_later_bindings() {
         r#"{ "${}" = 1; }"#,
         "{ ''${key}'' = 1; }",
         "{ ${__curPos} = 1; }",
-        "{ ${./path${x}} = 1; }",
+        "{ ${./path${__curPos}} = 1; }",
         "{ ${null} = __curPos; }",
         "{ ${null}.${__curPos} = 1; }",
         "{ inherit ${key}; }",

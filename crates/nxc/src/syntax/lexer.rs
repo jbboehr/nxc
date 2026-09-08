@@ -15,12 +15,38 @@ pub fn lex(source: &str) -> Vec<Token> {
     enum Mode {
         String { indented: bool },
         Interpolation { braces: usize },
+        Path,
     }
 
     let mut lexer = K::lexer(source);
     let mut modes = Vec::new();
     let mut tokens = Vec::new();
     loop {
+        if let Some(Mode::Path) = modes.last() {
+            let text = lexer.remainder();
+            let start = source.len() - text.len();
+            let len = text
+                .bytes()
+                .take_while(|c| {
+                    c.is_ascii_alphanumeric() || matches!(c, b'.' | b'_' | b'-' | b'+' | b'/')
+                })
+                .count();
+            let (kind, len) = if text.starts_with("${") {
+                modes.push(Mode::Interpolation { braces: 0 });
+                (K::InterpolationStart, 2)
+            } else if len != 0 {
+                (K::PathContent, len)
+            } else {
+                modes.pop();
+                continue;
+            };
+            lexer.bump(len);
+            tokens.push(Token {
+                kind,
+                span: start..start + len,
+            });
+            continue;
+        }
         if let Some(&Mode::String { indented }) = modes.last() {
             let text = lexer.remainder();
             let start = source.len() - text.len();
@@ -55,6 +81,26 @@ pub fn lex(source: &str) -> Vec<Token> {
         let Some(kind) = lexer.next() else { break };
         let mut kind = kind.unwrap_or(K::ErrorToken);
         match kind {
+            K::PathStart => {
+                let span = lexer.span();
+                tokens.push(Token {
+                    kind,
+                    span: span.start..span.end - 2,
+                });
+                tokens.push(Token {
+                    kind: K::InterpolationStart,
+                    span: span.end - 2..span.end,
+                });
+                modes.push(Mode::Path);
+                modes.push(Mode::Interpolation { braces: 0 });
+                continue;
+            }
+            K::RelativePath | K::AbsolutePath | K::HomePath
+                if lexer.remainder().starts_with("${") =>
+            {
+                kind = K::PathStart;
+                modes.push(Mode::Path);
+            }
             K::InterpolationStart => modes.push(Mode::Interpolation { braces: 0 }),
             K::StringStart => modes.push(Mode::String {
                 indented: lexer.slice() == "''",

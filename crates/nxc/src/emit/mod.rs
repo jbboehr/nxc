@@ -3,6 +3,26 @@
 mod nxc;
 pub use nxc::emit as nxc;
 
+pub(crate) fn interpolated_path(
+    parts: &[crate::ir::StringPart],
+    render: fn(&crate::ir::Expr) -> String,
+) -> String {
+    use crate::ir::StringPart;
+    let mut source = String::from("(");
+    for part in parts {
+        match part {
+            StringPart::Literal(text) => source.push_str(text),
+            StringPart::Interpolation(value) => {
+                source.push_str("${");
+                source.push_str(&render(value));
+                source.push('}');
+            }
+        }
+    }
+    source.push(')');
+    source
+}
+
 pub(crate) fn string(
     parts: &[crate::ir::StringPart],
     render: fn(&crate::ir::Expr) -> String,

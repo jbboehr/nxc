@@ -69,6 +69,15 @@ fn expressions() -> impl Strategy<Value = Expr> {
                 body: Box::new(body),
             }),
             prop::collection::vec(inner.clone(), 0..4).prop_map(Expr::List),
+            (
+                prop::sample::select(vec!["./", "../a/", "/", "/a/../", "~/a/../"]),
+                inner.clone()
+            )
+                .prop_map(|(prefix, value)| Expr::InterpolatedPath(vec![
+                    StringPart::Literal(prefix.into()),
+                    StringPart::Interpolation(value),
+                    StringPart::Literal("/suffix".into()),
+                ])),
             inner.clone().prop_map(|value| Expr::String(vec![
                 StringPart::Literal("prefix$".into()),
                 StringPart::Interpolation(value),

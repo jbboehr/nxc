@@ -80,6 +80,22 @@ pub(super) fn parse(tokens: &[Token], source_len: usize) -> (Option<Node>, Vec<D
             .clone()
             .delimited_by(just(K::InterpolationStart), just(K::InterpolationEnd))
             .map_with(|value, e| Node::new(K::StringInterpolation, e.span(), vec![value]));
+        let path_prefix =
+            just(K::PathStart).map_with(|_, e| Node::new(K::PathText, e.span(), vec![]));
+        let path_text =
+            just(K::PathContent).map_with(|_, e| Node::new(K::PathText, e.span(), vec![]));
+        let interpolated_path = path_prefix
+            .then(
+                choice((path_text, interpolation.clone()))
+                    .repeated()
+                    .at_least(1)
+                    .collect::<Vec<_>>(),
+            )
+            .map_with(|(prefix, parts), e| {
+                let mut children = vec![prefix];
+                children.extend(parts);
+                Node::new(K::InterpolatedPathExpr, e.span(), children)
+            });
         let string = choice((string_text, interpolation))
             .repeated()
             .collect::<Vec<_>>()
@@ -407,6 +423,7 @@ pub(super) fn parse(tokens: &[Token], source_len: usize) -> (Option<Node>, Vec<D
             search_path,
             absolute_path,
             home_path,
+            interpolated_path,
             paren,
             attrset,
             let_expr,

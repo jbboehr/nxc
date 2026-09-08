@@ -213,14 +213,10 @@ fn lower_with_string_context(
             ir::validate_name(&name).map_err(error)?;
             Ok(Expr::Variable(name))
         }
-        ast::Expr::PathRel(path) => {
-            let path = syntax(&path).text().to_string();
-            ir::validate_relative_path(&path).map_err(error)?;
-            Ok(Expr::RelativePath(path))
-        }
+        ast::Expr::PathRel(path) => lower_path(ast::Path::PathRel(path), depth),
         ast::Expr::PathSearch(path) => lower_search_path(path),
-        ast::Expr::PathAbs(path) => lower_absolute_path(path),
-        ast::Expr::PathHome(path) => lower_home_path(path),
+        ast::Expr::PathAbs(path) => lower_path(ast::Path::PathAbs(path), depth),
+        ast::Expr::PathHome(path) => lower_path(ast::Path::PathHome(path), depth),
         ast::Expr::Literal(literal) => {
             let token = syntax(&literal)
                 .first_token()
@@ -346,28 +342,27 @@ fn lower_with_string_context(
 }
 
 // Keep literal collection out of the recursive importer frame.
-fn lower_home_path(path: ast::PathHome) -> Result<Expr, Diagnostic> {
+fn lower_path(path: ast::Path, depth: usize) -> Result<Expr, Diagnostic> {
     let range = syntax(&path).text_range();
-    let path = syntax(&path).text().to_string();
-    ir::validate_home_path(&path).map_err(|message| {
+    let error = |message| {
         Diagnostic::new(
             usize::from(range.start())..usize::from(range.end()),
             message,
         )
-    })?;
-    Ok(Expr::HomePath(path))
-}
-
-fn lower_absolute_path(path: ast::PathAbs) -> Result<Expr, Diagnostic> {
-    let range = syntax(&path).text_range();
-    let path = syntax(&path).text().to_string();
-    ir::validate_absolute_path(&path).map_err(|message| {
-        Diagnostic::new(
-            usize::from(range.start())..usize::from(range.end()),
-            message,
-        )
-    })?;
-    Ok(Expr::AbsolutePath(path))
+    };
+    let mut parts = Vec::new();
+    for part in path.parts() {
+        parts.push(match part {
+            InterpolPart::Literal(text) => StringPart::Literal(text.syntax().text().to_owned()),
+            InterpolPart::Interpolation(value) => StringPart::Interpolation(lower(
+                value
+                    .expr()
+                    .ok_or_else(|| error("missing path interpolation expression"))?,
+                depth + 1,
+            )?),
+        });
+    }
+    ir::lower_path(parts).map_err(error)
 }
 
 fn lower_search_path(path: ast::PathSearch) -> Result<Expr, Diagnostic> {

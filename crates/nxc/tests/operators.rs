@@ -190,7 +190,7 @@ fn malformed_and_unsupported_operator_inputs_stay_lossless_and_recover() {
         "!if a then b else c",
         "a == x => x",
         "s.a or !x",
-        "false && ./path${x}",
+        "false && ./path${__curPos}",
         "true || __nxc_bad",
     ] {
         let parsed = syntax::parse(source);
