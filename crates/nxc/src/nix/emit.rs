@@ -59,7 +59,7 @@ fn render(expr: &Expr) -> String {
         Expr::Lambda { parameter, body } => {
             format!(
                 "({}: {})",
-                crate::emit::pattern(parameter, render),
+                crate::emit::pattern(parameter, render, |name| name),
                 render(body)
             )
         }

@@ -58,6 +58,7 @@ search-path lookup scope, lazy resolution, and search environment changes,
 absolute-path spelling, targets independent of file location, and path/division boundaries,
 home-path environment changes, verbatim dot components, and pure-mode rejection,
 path interpolation, coercion/context rejection, runtime normalization and lazy imports,
+keyword identifier scope, inheritance, and native function argument keys,
 short-circuit Boolean operators, implication normalization, comparison values
 and lazy collection equality,
 shallow attrset updates, operand forcing and lazy overridden attributes,
@@ -205,10 +206,21 @@ two expressions, with an optional trailing comma. Native output retains the
 parenthesized binary operation, preserving right-associative source grouping,
 shallow overrides, operand forcing, and the scopes of unevaluated attributes.
 No attributes are merged or evaluated during conversion. The `__nxc_` prefix
-remains forbidden for variables and parameter names in both dialects. Static
+remains forbidden for semantic variable and parameter names. Static
 attribute names such as `s.__nxc_update` still work; a qualified attribute call is
 an ordinary function call. The public update spelling is undecided, and `//`
 remains a line comment in nxc.
+
+Native `fn` and `yield` names remain unchanged in the IR. The nxc frontend
+decodes exactly `__nxc_ident_fn` and `__nxc_ident_yield` in variable and parameter
+positions; its emitter applies the inverse mapping. This includes attribute-pattern
+fields and `@` captures, preserving native argument lookup and `builtins.functionArgs`.
+Static keys are never decoded. Bindings and inheritance keep literal `fn`/`yield`
+keys, and the shared key emitter quotes `yield` to avoid the nxc let result marker.
+This preserves lexical, recursive, inherited, and `with` lookup without scope
+rewriting. Native identifiers using the compatibility spellings remain rejected
+under the prefix reservation, preventing capture of unrelated native variables.
+`or`, `__curPos`, and unknown `__nxc_*` forms remain unsupported as variable names.
 
 Lambda IR retains the single parameter, required fields, unevaluated defaults,
 ellipsis, and optional whole-argument binding. Parameter spellings (`fn`,
@@ -447,9 +459,8 @@ byte budget, including long exact subnormal spellings. No arithmetic is folded.
 Diagnostics carry byte spans separately from the IR. The nxc CST retains the
 source locations; CLI diagnostics attach the originating file path. Emitters
 validate IR supplied by callers and add parentheses conservatively. Paths are
-neither resolved nor rewritten. Reserved variable names, `__curPos`, and
-`__nxc_*` intrinsics are rejected in expression positions until their semantics
-are implemented.
+neither resolved nor rewritten. Unsupported reserved variable names and unknown
+`__nxc_*` forms are rejected in expression positions.
 
 The limits in `lib.rs` allow 1 MiB of source, 16,384 non-trivia tokens or semantic
 nodes, and 128 levels of nesting. Both parsers reject excessive source size,

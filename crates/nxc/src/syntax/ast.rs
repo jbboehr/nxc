@@ -86,7 +86,8 @@ impl Expression {
             }
             K::FloatExpr => lower_float(&self.0),
             K::VariableExpr => {
-                let name = self.0.text().to_string();
+                let spelling = self.0.text().to_string();
+                let name = super::ident::decode(&spelling).to_owned();
                 ir::validate_name(&name).map_err(error)?;
                 Ok(Expr::Variable(name))
             }
@@ -432,7 +433,7 @@ fn lower_pattern(node: &SyntaxNode, depth: usize) -> Result<Pattern, Diagnostic>
         node.children_with_tokens()
             .filter_map(|it| it.into_token())
             .find(|token| token.kind() == K::Ident)
-            .map(|token| token.text().to_owned())
+            .map(|token| super::ident::decode(token.text()).to_owned())
             .ok_or_else(|| {
                 let span = node.text_range();
                 Diagnostic::new(

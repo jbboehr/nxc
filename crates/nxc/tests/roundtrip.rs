@@ -119,8 +119,8 @@ fn unsupported_native_forms_are_never_guessed() {
         "./foo/",
         "a +++ b",
         "a ->> b",
-        "fn",
-        "yield",
+        "__nxc_ident_fn",
+        "__nxc_ident_yield",
         "__nxc_update",
         "__curPos",
         "9223372036854775808",
@@ -218,10 +218,17 @@ fn lexical_boundaries_preserve_names_and_distinguish_paths_from_arithmetic() {
             parse_nxc(keyword).is_err(),
             "accepted nxc keyword {keyword}"
         );
-        assert!(
-            nix::import(keyword).is_err(),
-            "accepted native keyword {keyword}"
-        );
+        if matches!(keyword, "fn" | "yield") {
+            assert_eq!(
+                nix::import(keyword).unwrap(),
+                Expr::Variable(keyword.into())
+            );
+        } else {
+            assert!(
+                nix::import(keyword).is_err(),
+                "accepted native keyword {keyword}"
+            );
+        }
     }
     assert_eq!(parse_nxc("/x").unwrap(), Expr::AbsolutePath("/x".into()));
     assert_eq!(nix::import("/x").unwrap(), Expr::AbsolutePath("/x".into()));

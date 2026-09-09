@@ -41,8 +41,10 @@ fn expressions() -> impl Strategy<Value = Expr> {
             .prop_map(|name| Expr::AbsolutePath(format!("/{name}"))),
         "[a-zA-Z0-9_+.-]{1,16}(/[a-zA-Z0-9_+.-]{1,16}){0,3}"
             .prop_map(|name| Expr::HomePath(format!("~/{name}"))),
-        prop::sample::select(vec!["f", "x", "g", "foo-bar'", "true", "false", "null"])
-            .prop_map(|name| Expr::Variable(name.into())),
+        prop::sample::select(vec![
+            "f", "x", "g", "foo-bar'", "true", "false", "null", "fn", "yield"
+        ])
+        .prop_map(|name| Expr::Variable(name.into())),
     ]
     .prop_recursive(5, 64, 3, |inner| {
         prop_oneof![
@@ -61,13 +63,18 @@ fn expressions() -> impl Strategy<Value = Expr> {
                 scope: Box::new(scope),
                 body: Box::new(body),
             }),
-            (inner.clone(), inner.clone()).prop_map(|(value, body)| Expr::Let {
-                bindings: vec![Binding::Assign {
-                    path: vec!["local".into(), "yield".into()],
-                    value,
-                }],
-                body: Box::new(body),
-            }),
+            (
+                inner.clone(),
+                inner.clone(),
+                prop::sample::select(vec!["local", "fn", "yield"])
+            )
+                .prop_map(|(value, body, name)| Expr::Let {
+                    bindings: vec![Binding::Assign {
+                        path: vec![name.into(), "yield".into()],
+                        value,
+                    }],
+                    body: Box::new(body),
+                }),
             prop::collection::vec(inner.clone(), 0..4).prop_map(Expr::List),
             (
                 prop::sample::select(vec!["./", "../a/", "/", "/a/../", "~/a/../"]),
@@ -143,29 +150,45 @@ fn expressions() -> impl Strategy<Value = Expr> {
                     value: Box::new(value),
                     path,
                 }),
-            inner.clone().prop_map(|body| Expr::Lambda {
-                parameter: Pattern::Ident("x".into()),
-                body: Box::new(body),
-            }),
-            (inner.clone(), inner.clone(), any::<bool>(), any::<bool>()).prop_map(
-                |(default, body, ellipsis, capture)| Expr::Lambda {
-                    parameter: Pattern::AttrSet {
-                        fields: vec![
-                            Formal {
-                                name: "x".into(),
-                                default: Some(default)
-                            },
-                            Formal {
-                                name: "y".into(),
-                                default: None
-                            },
-                        ],
-                        ellipsis,
-                        bind: capture.then(|| "args".into()),
-                    },
+            (
+                inner.clone(),
+                prop::sample::select(vec!["x", "fn", "yield"])
+            )
+                .prop_map(|(body, name)| Expr::Lambda {
+                    parameter: Pattern::Ident(name.into()),
                     body: Box::new(body),
-                }
-            ),
+                }),
+            (
+                inner.clone(),
+                inner.clone(),
+                any::<bool>(),
+                any::<bool>(),
+                prop::sample::select(vec![
+                    ("x", "y", "args"),
+                    ("fn", "yield", "args"),
+                    ("x", "fn", "yield"),
+                    ("yield", "y", "fn")
+                ])
+            )
+                .prop_map(
+                    |(default, body, ellipsis, capture, (first, second, bind))| Expr::Lambda {
+                        parameter: Pattern::AttrSet {
+                            fields: vec![
+                                Formal {
+                                    name: first.into(),
+                                    default: Some(default)
+                                },
+                                Formal {
+                                    name: second.into(),
+                                    default: None
+                                },
+                            ],
+                            ellipsis,
+                            bind: capture.then(|| bind.into()),
+                        },
+                        body: Box::new(body),
+                    }
+                ),
             inner.clone().prop_map(|e| Expr::Negate(Box::new(e))),
             inner.clone().prop_map(|e| Expr::Not(Box::new(e))),
             (inner.clone(), inner.clone()).prop_map(|(f, a)| Expr::Apply {
@@ -281,7 +304,7 @@ fn emitters_reject_invalid_ir_instead_of_emitting_different_semantics() {
     for expr in [
         Expr::Integer(u64::MAX),
         Expr::Variable("x: x".into()),
-        Expr::Variable("fn".into()),
+        Expr::Variable("__nxc_ident_fn".into()),
         Expr::Variable("__curPos".into()),
     ] {
         assert!(emit::nxc(&expr).is_err());

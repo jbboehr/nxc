@@ -135,7 +135,7 @@ fn invalid_parameters_and_unsupported_lambda_forms_are_rejected_losslessly() {
         "{ x, x }: x",
         "x@{ x }: x",
         "{ x }@x: x",
-        "fn: 1",
+        "__nxc_private: 1",
         "{ __curPos }: 1",
     ] {
         assert!(nix::import(source).is_err(), "accepted {source}");
@@ -226,7 +226,7 @@ fn emission_checks_delimiter_depth_in_nested_pattern_defaults() {
 fn emitters_validate_caller_supplied_patterns_and_default_expressions() {
     for parameter in [
         Pattern::Ident("x: 1".into()),
-        Pattern::Ident("fn".into()),
+        Pattern::Ident("__nxc_ident_fn".into()),
         Pattern::AttrSet {
             fields: vec![
                 Formal {

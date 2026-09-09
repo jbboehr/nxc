@@ -194,7 +194,7 @@ fn unsupported_names_remain_lossless_errors_and_recover_later_items() {
     ] {
         assert!(nix::import(native).is_err(), "accepted native {native}");
     }
-    for name in ["fn", "yield", "or", "__curPos", "__nxc_update"] {
+    for name in ["or", "__curPos", "__nxc_update"] {
         for (source, native) in [
             (
                 format!("let {{ \"{name}\" = 1; yield 2; }}"),

@@ -24,6 +24,10 @@ fn attribute_names_do_not_inherit_variable_name_restrictions() {
         both_dialects_accept(&format!("{{ inherit (source) {name}; }}.{name}"));
 
         let plain_inherit = format!("{{ inherit {name}; }}");
+        if matches!(name, "fn" | "yield") {
+            both_dialects_accept(&plain_inherit);
+            continue;
+        }
         assert!(
             parse_nxc(&plain_inherit).is_err(),
             "plain nxc inherit accepted variable-reserved name {name}"

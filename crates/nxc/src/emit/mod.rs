@@ -59,7 +59,9 @@ fn escape_literal(text: &str, source: &mut String) {
 }
 
 fn attribute(name: &str) -> String {
-    if crate::ir::validate_bare_attr_name(name).is_ok() {
+    // A bare yield at the start of an nxc let binding is the result marker.
+    // Quoting the key is also valid in native Nix and preserves its literal name.
+    if name != "yield" && crate::ir::validate_bare_attr_name(name).is_ok() {
         return name.to_owned();
     }
     let mut source = String::from("\"");
@@ -141,14 +143,15 @@ pub(crate) fn selection(
     source
 }
 
-// Pattern punctuation is shared; default expressions use the target dialect.
+// Pattern punctuation is shared; names and defaults use the target dialect.
 pub(crate) fn pattern(
     parameter: &crate::ir::Pattern,
     render: fn(&crate::ir::Expr) -> String,
+    name: fn(&str) -> &str,
 ) -> String {
     use crate::ir::Pattern;
     match parameter {
-        Pattern::Ident(name) => name.clone(),
+        Pattern::Ident(parameter) => name(parameter).to_owned(),
         Pattern::AttrSet {
             fields,
             ellipsis,
@@ -157,8 +160,8 @@ pub(crate) fn pattern(
             let mut entries: Vec<_> = fields
                 .iter()
                 .map(|field| match &field.default {
-                    Some(default) => format!("{} ? {}", field.name, render(default)),
-                    None => field.name.clone(),
+                    Some(default) => format!("{} ? {}", name(&field.name), render(default)),
+                    None => name(&field.name).to_owned(),
                 })
                 .collect();
             if *ellipsis {
@@ -167,7 +170,7 @@ pub(crate) fn pattern(
             let mut result = format!("{{ {} }}", entries.join(", "));
             if let Some(bind) = bind {
                 result.push('@');
-                result.push_str(bind);
+                result.push_str(name(bind));
             }
             result
         }

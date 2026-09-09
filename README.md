@@ -174,12 +174,39 @@ once, must be the final item, and needs a semicolon. It does not return early.
 A `let` block is an expression and can appear directly in calls, lists,
 arithmetic, and selections, for example `f(let { yield 1; })` or
 `let { yield { a = 1; }; }.a`. Local bindings can use quoted names too:
-`let { "a b" = 1; yield { inherit "a b"; }; }`. The names `fn`, `yield`, `or`,
-`__curPos`, and `__nxc_*` remain reserved in local bindings and plain inheritance,
-including when quoted. Lambda parameters still require supported identifiers.
+`let { "a b" = 1; yield { inherit "a b"; }; }`. The names `or`, `__curPos`, and
+`__nxc_*` remain reserved as local binding keys and in plain inheritance,
+including when quoted.
 The first component of a `let` binding must be a static name, including a direct
 literal such as `${"x"}`. Later components can be computed: `a.${name} = value;`.
 Inheritance also requires static names and accepts `inherit ${"x"};`.
+
+Native variables named `fn` or `yield` use temporary compatibility spellings in
+nxc because those words have syntax roles:
+
+| Native name | nxc variable or parameter |
+| --- | --- |
+| `fn` | `__nxc_ident_fn` |
+| `yield` | `__nxc_ident_yield` |
+
+These spellings also work in attribute patterns and `@` captures. Attribute keys
+keep their literal names: `({ __nxc_ident_fn }) => __nxc_ident_fn` accepts an
+argument with an attribute named `fn`. Quote a `yield` key at the start of a
+local binding to distinguish it from the result marker:
+
+```nix
+let {
+    fn = x => x + 1;
+    "yield" = __nxc_ident_fn(2);
+    yield __nxc_ident_yield;
+}
+```
+
+This converts to native `let fn = x: x + 1; yield = fn 2; in yield`.
+Selections such as `value.fn` and literal keys such as `"__nxc_ident_fn"` keep
+their exact names. Conversion may add quotes around `yield` keys. These
+compatibility spellings are temporary; general escaped-identifier syntax is
+not yet defined.
 
 Use `with(context, expression)` to make attributes from a context available
 inside an expression:

@@ -2,6 +2,7 @@
 
 pub mod ast;
 mod cst;
+pub(crate) mod ident;
 mod kind;
 pub mod lexer;
 mod parser;

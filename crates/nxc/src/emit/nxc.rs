@@ -3,7 +3,7 @@
 use crate::{
     Diagnostic, MAX_DEPTH, MAX_SOURCE_BYTES, MAX_TOKENS,
     ir::{BinaryOp, Expr},
-    syntax::{SyntaxKind as K, lexer},
+    syntax::{SyntaxKind as K, ident, lexer},
 };
 
 /// Emit canonical nxc, flattening left-associated unary application chains.
@@ -45,7 +45,7 @@ fn render(expr: &Expr) -> String {
     match expr {
         Expr::Integer(value) => value.to_string(),
         Expr::Float(value) => value.to_string(),
-        Expr::Variable(name) => name.clone(),
+        Expr::Variable(name) => ident::encode(name).to_owned(),
         // Protect path characters from surrounding unary operators and selections.
         Expr::RelativePath(path)
         | Expr::AbsolutePath(path)
@@ -87,7 +87,7 @@ fn render(expr: &Expr) -> String {
         } => super::selection(value, path, default.as_deref(), render),
         Expr::HasAttr { value, path } => super::has_attr(value, path, render),
         Expr::Lambda { parameter, body } => {
-            let spelling = super::pattern(parameter, render);
+            let spelling = super::pattern(parameter, render, ident::encode);
             let parameter = match parameter {
                 crate::ir::Pattern::Ident(_) => spelling,
                 crate::ir::Pattern::AttrSet { .. } => format!("({spelling})"),

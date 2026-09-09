@@ -77,11 +77,11 @@ fn emitters_validate_the_let_body_and_variable_bindings() {
         },
         Expr::Let {
             bindings: vec![],
-            body: Box::new(Expr::Variable("yield".into())),
+            body: Box::new(Expr::Variable("__nxc_ident_yield".into())),
         },
         Expr::Let {
             bindings: vec![Binding::Assign {
-                path: vec!["fn".into()],
+                path: vec!["__nxc_ident_fn".into()],
                 value: Expr::Integer(1),
             }],
             body: Box::new(Expr::Integer(2)),
@@ -89,7 +89,7 @@ fn emitters_validate_the_let_body_and_variable_bindings() {
         Expr::Let {
             bindings: vec![Binding::Inherit {
                 source: Some(Expr::Variable("src".into())),
-                names: vec!["yield".into()],
+                names: vec!["or".into()],
             }],
             body: Box::new(Expr::Integer(2)),
         },
@@ -212,13 +212,11 @@ fn let_bindings_reject_conflicts_and_reserved_variable_names() {
         "a = { b = 1; }; a.b = 2;",
         "inherit a; a.b = 1;",
         "inherit (src) a a;",
-        "fn = 1;",
-        "yield = 1;",
         "or = 1;",
         "__curPos = 1;",
         "__nxc_private.x = 1;",
-        "inherit (src) fn;",
-        "inherit yield;",
+        "inherit (src) __nxc_ident_fn;",
+        "inherit or;",
         "''quoted'' = 1;",
         "${name} = 1;",
     ] {

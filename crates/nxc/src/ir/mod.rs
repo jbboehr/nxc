@@ -236,7 +236,7 @@ pub(crate) fn validate_name(name: &str) -> Result<(), &'static str> {
 
 // Quoting a name may broaden its spelling, but does not unreserve intrinsics.
 fn validate_scoped_name(name: &str) -> Result<(), &'static str> {
-    if name.starts_with("__nxc_") || matches!(name, "__curPos" | "fn" | "yield" | "or") {
+    if name.starts_with("__nxc_") || matches!(name, "__curPos" | "or") {
         return Err("reserved form is not supported yet");
     }
     Ok(())

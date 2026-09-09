@@ -142,7 +142,7 @@ fn invalid_dynamic_bindings_remain_lossless_and_recover_later_bindings() {
         r#"${key}"#,
         r#""${key}""#,
         r#"${if true then "x" else "y"}"#,
-        r#"${"fn"}"#,
+        r#"${"or"}"#,
         r#"${"__curPos"}"#,
         r#"${"__nxc_update"}"#,
     ] {
