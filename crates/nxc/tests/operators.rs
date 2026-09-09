@@ -1,3 +1,6 @@
+mod support;
+use support::nxc;
+
 use nxc::{
     MAX_DEPTH, MAX_TOKENS, emit,
     ir::{BinaryOp, Expr},

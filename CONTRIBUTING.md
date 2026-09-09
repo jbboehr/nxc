@@ -462,13 +462,31 @@ validate IR supplied by callers and add parentheses conservatively. Paths are
 neither resolved nor rewritten. Unsupported reserved variable names and unknown
 `__nxc_*` forms are rejected in expression positions.
 
-The limits in `lib.rs` allow 1 MiB of source, 16,384 non-trivia tokens or semantic
-nodes, and 128 levels of nesting. Both parsers reject excessive source size,
-token count, or nesting, and emitters
-reject output that would exceed the corresponding parser's size/token limits.
-Token and nesting limits are checked before collecting lexical diagnostics;
+The ceilings in `lib.rs` allow 32 MiB of source, 4,194,304 non-trivia tokens or
+semantic nodes, and 128 levels of nesting. `Limits::new(bytes, tokens)` selects
+smaller budgets; it returns `None` above either supported ceiling. Zero is valid
+and rejects any expression requiring that resource. Existing entry points use
+`Limits::default()`. The `*_with_limits` variants accept an explicit budget;
+parsed trees retain it across cloning and lowering. Both emitters validate IR
+and generated output against their supplied budgets.
+
+Diagnostics distinguish source bytes/tokens, delimiter depth, syntax-tree depth,
+semantic nodes/depth/literal bytes, and generated-output bounds. They report the
+observed value and limit. Reported source token counts and delimiter peaks cover
+the full lexed source. Native whitespace/comment compatibility checks may reject
+input earlier. Bounded file reads and recursive lowering may stop on the first
+excess, so their observations can be lower bounds on the total requirement.
+The nxc frontend checks token and nesting limits before collecting lexical diagnostics;
 over-budget nxc input produces one limit diagnostic and a flat lossless CST.
+Both frontends return at most 100 diagnostics. At that many lexical errors the
+nxc frontend retains a flat CST and skips grammar recovery, bounding reporting
+cost as input capacity grows.
 Temporary nxc grammar trees and native parsed trees are freed iteratively:
 operator chains can exceed the semantic depth limit before lowering rejects them.
 This also covers native parse errors and cloned `nix::Parsed` values.
-Raise these bounds only with coverage for parser, CST, IR, and emitter depth.
+Boundary integration tests use small explicit budgets through
+`tests/support/mod.rs`; `capacity.rs`, CLI/corpus tests, and external corpus runs
+exercise the default ceilings. This keeps routine boundary tests independent of
+the default fixture size while covering the same production paths.
+Raise bounds only with parser, CST, IR, and emitter coverage plus measurements of
+large real inputs. See [capacity measurements](docs/development/capacity.md).

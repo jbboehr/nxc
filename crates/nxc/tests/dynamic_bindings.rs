@@ -1,3 +1,6 @@
+mod support;
+use support::nxc;
+
 use nxc::{
     MAX_DEPTH, MAX_SOURCE_BYTES, MAX_TOKENS, emit,
     ir::{AttrName, Binding, Expr, StringPart},

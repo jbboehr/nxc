@@ -1,3 +1,6 @@
+mod support;
+use support::nxc;
+
 use nxc::{emit, nix, parse_nxc, syntax};
 
 fn roundtrip(source: &str, native: &str) {

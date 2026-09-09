@@ -1,3 +1,6 @@
+mod support;
+use support::nxc;
+
 use nxc::{MAX_SOURCE_BYTES, emit, ir::Expr, nix, parse_nxc, syntax};
 use std::{io::ErrorKind, process::Command};
 

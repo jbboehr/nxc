@@ -128,7 +128,7 @@ fn invalid_utf8_and_oversized_files_fail_at_read_without_stopping_the_run() {
     fs::write(dir.path().join("1-exact-limit.nix"), exact_limit).unwrap();
     fs::write(
         dir.path().join("2-over-limit.nix"),
-        vec![b' '; nxc::MAX_SOURCE_BYTES + 1],
+        vec![b' '; nxc::MAX_SOURCE_BYTES + 100],
     )
     .unwrap();
     fs::write(dir.path().join("3-valid.nix"), "1").unwrap();
@@ -141,6 +141,11 @@ fn invalid_utf8_and_oversized_files_fail_at_read_without_stopping_the_run() {
     let failures = String::from_utf8(output.stderr).unwrap();
     assert!(failures.contains("0-encoding.nix [read]"));
     assert!(failures.contains("2-over-limit.nix [read]"));
+    assert!(failures.contains(&format!(
+        "source byte limit exceeded: observed {}, limit {}",
+        nxc::MAX_SOURCE_BYTES + 1,
+        nxc::MAX_SOURCE_BYTES
+    )));
 }
 
 #[test]
@@ -167,11 +172,13 @@ fn emission_limit_failure_is_distinct_from_parse_or_lowering_failure() {
     assert_eq!(count(&summary, "nxc emit failures"), 1);
     assert_eq!(count(&summary, "nxc parse failures"), 0);
     assert_eq!(count(&summary, "nxc parse successes"), 0);
-    assert!(
-        String::from_utf8(output.stderr)
-            .unwrap()
-            .contains("large.nix [nxc emit]")
-    );
+    let failures = String::from_utf8(output.stderr).unwrap();
+    assert!(failures.contains("large.nix [nxc emit]"));
+    assert!(failures.contains(&format!(
+        "generated nxc token limit exceeded: observed {}, limit {}",
+        nxc::MAX_TOKENS + 6,
+        nxc::MAX_TOKENS
+    )));
 }
 
 #[test]

@@ -39,10 +39,9 @@ impl Expression {
         // chains can pass parser preflight but exceed the semantic depth limit.
         if depth > MAX_DEPTH {
             let span = self.0.text_range();
-            return Err(Diagnostic::new(
-                usize::from(span.start())..usize::from(span.end()),
-                "expression exceeds the nesting limit",
-            ));
+            let mut error = crate::limits::exceeded("semantic depth", depth, MAX_DEPTH);
+            error.span = usize::from(span.start())..usize::from(span.end());
+            return Err(error);
         }
         // Generated output parenthesizes semantic operations. These wrappers
         // must not add a full recursive lowering frame at each nesting level.

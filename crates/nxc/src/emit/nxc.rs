@@ -1,30 +1,26 @@
 // SPDX-License-Identifier: AGPL-3.0-only WITH romic-exception
 
 use crate::{
-    Diagnostic, MAX_DEPTH, MAX_SOURCE_BYTES, MAX_TOKENS,
+    Diagnostic, Limits, MAX_DEPTH,
     ir::{BinaryOp, Expr},
+    limits,
     syntax::{SyntaxKind as K, ident, lexer},
 };
 
 /// Emit canonical nxc, flattening left-associated unary application chains.
 pub fn emit(expr: &Expr) -> Result<String, Diagnostic> {
-    expr.validate()?;
+    emit_with_limits(expr, Limits::default())
+}
+
+pub fn emit_with_limits(expr: &Expr, limits: Limits) -> Result<String, Diagnostic> {
+    expr.validate(limits)?;
     let source = render(expr);
-    let limit = || {
-        Diagnostic::new(
-            0..0,
-            "generated nxc exceeds the source, token, or nesting limit",
-        )
-    };
-    if source.len() > MAX_SOURCE_BYTES {
-        return Err(limit());
-    }
+    limits::check("generated nxc byte", source.len(), limits.source_bytes)?;
     let mut depth = 0usize;
-    for (index, token) in lexer::lex(&source)
-        .iter()
-        .filter(|t| !t.kind.is_trivia())
-        .enumerate()
-    {
+    let mut peak_depth = 0;
+    let mut count = 0;
+    for token in lexer::lex(&source).iter().filter(|t| !t.kind.is_trivia()) {
+        count += 1;
         match token.kind {
             K::LParen | K::LBrace | K::LBracket | K::StringStart | K::InterpolationStart => {
                 depth += 1
@@ -34,10 +30,10 @@ pub fn emit(expr: &Expr) -> Result<String, Diagnostic> {
             }
             _ => {}
         }
-        if index >= MAX_TOKENS || depth > MAX_DEPTH {
-            return Err(limit());
-        }
+        peak_depth = peak_depth.max(depth);
     }
+    limits::check("generated nxc token", count, limits.tokens)?;
+    limits::check("generated nxc delimiter depth", peak_depth, MAX_DEPTH)?;
     Ok(source)
 }
 

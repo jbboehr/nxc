@@ -2,8 +2,9 @@
 
 use crate::string::StringContext;
 use crate::{
-    Diagnostic, MAX_DEPTH, MAX_SOURCE_BYTES, MAX_TOKENS,
+    Diagnostic, Limits, MAX_DEPTH,
     ir::{self, AttrName, BinaryOp, Binding, Expr, Formal, Pattern, StringPart},
+    limits,
 };
 use rnix::{
     SyntaxKind as K,
@@ -16,11 +17,16 @@ pub fn import(source: &str) -> Result<Expr, Vec<Diagnostic>> {
     parse(source)?.lower()
 }
 
+pub fn import_with_limits(source: &str, limits: Limits) -> Result<Expr, Vec<Diagnostic>> {
+    parse_with_limits(source, limits)?.lower()
+}
+
 /// A native syntax tree that passed parsing and compatibility/resource checks.
 #[derive(Debug, Clone)]
 pub struct Parsed {
     root: Option<ast::Root>,
     source_len: usize,
+    limits: Limits,
 }
 
 impl Drop for Parsed {
@@ -58,7 +64,7 @@ impl Parsed {
                 )]
             })?;
         let result = lower(root, 1).map_err(|e| vec![e])?;
-        result.validate().map_err(|mut e| {
+        result.validate(self.limits).map_err(|mut e| {
             e.span = 0..self.source_len;
             vec![e]
         })?;
@@ -69,15 +75,22 @@ impl Parsed {
 /// Parse native syntax separately from lowering, including preflight checks.
 /// Parsing success does not imply that the syntax is supported by lowering.
 pub fn parse(source: &str) -> Result<Parsed, Vec<Diagnostic>> {
-    check_source(source).map_err(|e| vec![e])?;
+    parse_with_limits(source, Limits::default())
+}
+
+/// Retain the selected budgets for subsequent lowering and cloned parsed trees.
+pub fn parse_with_limits(source: &str, limits: Limits) -> Result<Parsed, Vec<Diagnostic>> {
+    check_source(source, limits).map_err(|e| vec![e])?;
     let parsed = rnix::Root::parse(source);
     let root = Parsed {
         root: Some(parsed.tree()),
         source_len: source.len(),
+        limits,
     };
     let errors: Vec<_> = parsed
         .errors()
         .iter()
+        .take(limits::MAX_DIAGNOSTICS)
         .map(|e| {
             use rnix::ParseError::*;
             let span = match e {
@@ -99,15 +112,11 @@ pub fn parse(source: &str) -> Result<Parsed, Vec<Diagnostic>> {
     Ok(root)
 }
 
-pub(super) fn check_source(source: &str) -> Result<(), Diagnostic> {
-    if source.len() > MAX_SOURCE_BYTES {
-        return Err(Diagnostic::new(
-            0..source.len(),
-            "source exceeds the 1 MiB limit",
-        ));
-    }
+pub(super) fn check_source(source: &str, limits: Limits) -> Result<(), Diagnostic> {
+    limits.check_source_bytes(source.len())?;
     let mut count = 0;
     let mut depth = 0usize;
+    let mut peak_depth = 0;
     let mut offset = 0;
     for (kind, text) in rnix::tokenize(source) {
         let start = offset;
@@ -152,14 +161,14 @@ pub(super) fn check_source(source: &str) -> Result<(), Diagnostic> {
             | K::TOKEN_INTERPOL_END => depth = depth.saturating_sub(1),
             _ => {}
         }
-        if count > MAX_TOKENS || depth > MAX_DEPTH {
-            return Err(Diagnostic::new(
-                0..source.len(),
-                "expression exceeds the token or nesting limit",
-            ));
-        }
+        peak_depth = peak_depth.max(depth);
     }
-    Ok(())
+    limits::check("source token", count, limits.tokens)
+        .and_then(|()| limits::check("delimiter depth", peak_depth, MAX_DEPTH))
+        .map_err(|mut error| {
+            error.span = 0..source.len();
+            error
+        })
 }
 
 // Use rnix's marker trait to access its own Rowan version inside the adapter.
@@ -191,7 +200,9 @@ fn lower_with_string_context(
     let span = usize::from(range.start())..usize::from(range.end());
     let error = |message: &str| Diagnostic::new(span.clone(), message);
     if depth > MAX_DEPTH {
-        return Err(error("expression exceeds the nesting limit"));
+        return Err(error(
+            &limits::exceeded("semantic depth", depth, MAX_DEPTH).message,
+        ));
     }
     let child = |node: Option<ast::Expr>| {
         lower(

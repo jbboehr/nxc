@@ -2,5 +2,5 @@
 
 mod emit;
 mod import;
-pub use emit::emit;
-pub use import::{Parsed, import, parse};
+pub use emit::{emit, emit_with_limits};
+pub use import::{Parsed, import, import_with_limits, parse, parse_with_limits};

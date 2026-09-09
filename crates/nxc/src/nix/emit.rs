@@ -1,12 +1,19 @@
 // SPDX-License-Identifier: AGPL-3.0-only WITH romic-exception
 
-use crate::{Diagnostic, ir::Expr};
+use crate::{Diagnostic, Limits, ir::Expr};
 
 /// Emit conservative, parenthesized native Nix without evaluating expressions.
 pub fn emit(expr: &Expr) -> Result<String, Diagnostic> {
-    expr.validate()?;
+    emit_with_limits(expr, Limits::default())
+}
+
+pub fn emit_with_limits(expr: &Expr, limits: Limits) -> Result<String, Diagnostic> {
+    expr.validate(limits)?;
     let source = render(expr);
-    super::import::check_source(&source)?;
+    super::import::check_source(&source, limits).map_err(|mut error| {
+        error.message = format!("generated Nix: {}", error.message);
+        error
+    })?;
     Ok(source)
 }
 

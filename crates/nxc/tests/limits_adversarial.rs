@@ -1,3 +1,6 @@
+mod support;
+use support::nxc;
+
 use nxc::{MAX_TOKENS, nix, parse_nxc, syntax};
 
 fn balanced_sum(leaves: usize) -> String {

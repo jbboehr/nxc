@@ -243,7 +243,19 @@ fn emission_limit_errors_do_not_open_existing_destinations() {
         assert!(!failed.status.success(), "{command}: {failed:?}");
         assert!(failed.stdout.is_empty(), "{command}: {failed:?}");
         let error = String::from_utf8(failed.stderr).unwrap();
-        assert!(error.contains("limit"), "{command}: {error}");
+        let kind = if command == "to-nix" {
+            "generated Nix: source token"
+        } else {
+            "generated nxc token"
+        };
+        assert!(
+            error.contains(&format!(
+                "{kind} limit exceeded: observed {}, limit {}",
+                nxc::MAX_TOKENS + 6,
+                nxc::MAX_TOKENS
+            )),
+            "{command}: {error}"
+        );
         assert_eq!(fs::read_to_string(&output).unwrap(), "keep me", "{command}");
     }
 }
@@ -291,7 +303,14 @@ fn assert_conversion_byte_limit_includes_final_newline(command: &str) {
         );
         assert!(failed.stdout.is_empty());
         let error = String::from_utf8(failed.stderr).unwrap();
-        assert!(error.contains("limit"), "{command}: {error}");
+        assert!(
+            error.contains(&format!(
+                "converted output: source byte limit exceeded: observed {}, limit {}",
+                nxc::MAX_SOURCE_BYTES + 1,
+                nxc::MAX_SOURCE_BYTES
+            )),
+            "{command}: {error}"
+        );
         assert_eq!(fs::read_to_string(&output).unwrap(), "keep me", "{command}");
     }
 }
@@ -336,6 +355,38 @@ fn over_budget_lexical_errors_produce_one_cli_diagnostic() {
         assert!(failed.stdout.is_empty());
         let error = String::from_utf8(failed.stderr).unwrap();
         assert_eq!(error.lines().count(), 1);
-        assert!(error.contains("limit"), "{error}");
+        assert!(
+            error.contains(&format!(
+                "source token limit exceeded: observed {}, limit {}",
+                nxc::MAX_TOKENS + 1,
+                nxc::MAX_TOKENS
+            )),
+            "{error}"
+        );
+    }
+}
+
+#[test]
+fn oversized_reads_report_observed_bytes_before_conversion() {
+    let dir = TempDir::new().unwrap();
+    let input = dir.path().join("oversized.expr");
+    fs::File::create(&input)
+        .unwrap()
+        .set_len((nxc::MAX_SOURCE_BYTES + 100) as u64)
+        .unwrap();
+    for command in ["check", "to-nix", "from-nix"] {
+        let failed = cli(&[command.as_ref(), input.as_os_str()]);
+        assert!(!failed.status.success());
+        assert!(failed.stdout.is_empty());
+        let error = String::from_utf8(failed.stderr).unwrap();
+        assert_eq!(error.lines().count(), 1);
+        assert!(
+            error.contains(&format!(
+                "source byte limit exceeded: observed {}, limit {}",
+                nxc::MAX_SOURCE_BYTES + 1,
+                nxc::MAX_SOURCE_BYTES
+            )),
+            "{command}: {error}"
+        );
     }
 }

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only WITH romic-exception
 
 mod nxc;
-pub use nxc::emit as nxc;
+pub use nxc::{emit as nxc, emit_with_limits as nxc_with_limits};
 
 pub(crate) fn interpolated_path(
     parts: &[crate::ir::StringPart],

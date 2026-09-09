@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only WITH romic-exception
 
+use crate::{Limits, limits};
+
 mod float;
 mod path;
 pub use float::Float;
@@ -294,7 +296,7 @@ impl Expr {
         self
     }
 
-    pub(crate) fn validate(&self) -> Result<(), crate::Diagnostic> {
+    pub(crate) fn validate(&self, limits: Limits) -> Result<(), crate::Diagnostic> {
         let mut pending = vec![(self, 1)];
         let mut count = 0;
         let mut literal_bytes = 0;
@@ -302,9 +304,8 @@ impl Expr {
         while let Some((expr, depth)) = pending.pop() {
             count += 1;
             let error = |msg| crate::Diagnostic::new(0..0, msg);
-            if depth > crate::MAX_DEPTH || count > crate::MAX_TOKENS {
-                return Err(error("expression exceeds the node or nesting limit"));
-            }
+            limits::check("semantic depth", depth, crate::MAX_DEPTH)?;
+            limits::check("semantic node", count, limits.tokens)?;
             match expr {
                 Self::Integer(value) if *value > i64::MAX as u64 => {
                     return Err(error("integer literal exceeds the Nix signed 64-bit range"));
@@ -312,51 +313,60 @@ impl Expr {
                 Self::Integer(_) => {}
                 Self::Float(value) => {
                     let bytes = value.to_string().len();
-                    if bytes > crate::MAX_SOURCE_BYTES - literal_bytes {
-                        return Err(error("float literals exceed the source size limit"));
-                    }
-                    literal_bytes += bytes;
+                    limits::consume(
+                        "semantic literal byte",
+                        &mut literal_bytes,
+                        bytes,
+                        limits.source_bytes,
+                    )?;
                 }
                 Self::Variable(name) => validate_name(name).map_err(error)?,
                 Self::RelativePath(path) => {
-                    if path.len() > crate::MAX_SOURCE_BYTES - literal_bytes {
-                        return Err(error("path literals exceed the source size limit"));
-                    }
+                    limits::consume(
+                        "semantic literal byte",
+                        &mut literal_bytes,
+                        path.len(),
+                        limits.source_bytes,
+                    )?;
                     validate_relative_path(path).map_err(error)?;
-                    literal_bytes += path.len();
                 }
                 Self::SearchPath(path) => {
-                    if path.len() > crate::MAX_SOURCE_BYTES - literal_bytes {
-                        return Err(error("path literals exceed the source size limit"));
-                    }
+                    limits::consume(
+                        "semantic literal byte",
+                        &mut literal_bytes,
+                        path.len(),
+                        limits.source_bytes,
+                    )?;
                     validate_search_path(path).map_err(error)?;
-                    literal_bytes += path.len();
                 }
                 Self::AbsolutePath(path) => {
-                    if path.len() > crate::MAX_SOURCE_BYTES - literal_bytes {
-                        return Err(error("path literals exceed the source size limit"));
-                    }
+                    limits::consume(
+                        "semantic literal byte",
+                        &mut literal_bytes,
+                        path.len(),
+                        limits.source_bytes,
+                    )?;
                     validate_absolute_path(path).map_err(error)?;
-                    literal_bytes += path.len();
                 }
                 Self::HomePath(path) => {
-                    if path.len() > crate::MAX_SOURCE_BYTES - literal_bytes {
-                        return Err(error("path literals exceed the source size limit"));
-                    }
+                    limits::consume(
+                        "semantic literal byte",
+                        &mut literal_bytes,
+                        path.len(),
+                        limits.source_bytes,
+                    )?;
                     validate_home_path(path).map_err(error)?;
-                    literal_bytes += path.len();
                 }
                 Self::List(items) => {
-                    if items.len() > crate::MAX_TOKENS - count {
-                        return Err(error("list elements exceed the node limit"));
-                    }
+                    limits::check(
+                        "semantic node",
+                        count.saturating_add(items.len()),
+                        limits.tokens,
+                    )?;
                     pending.extend(items.iter().map(|item| (item, depth + 1)));
                 }
                 Self::String(parts) | Self::InterpolatedPath(parts) => {
-                    if parts.len() > crate::MAX_TOKENS - count {
-                        return Err(error("string parts exceed the node limit"));
-                    }
-                    count += parts.len();
+                    limits::consume("semantic node", &mut count, parts.len(), limits.tokens)?;
                     let mut previous_literal = false;
                     for part in parts {
                         match part {
@@ -369,12 +379,12 @@ impl Expr {
                                 if text.contains('\0') {
                                     return Err(error("Nix strings cannot contain null bytes"));
                                 }
-                                if text.len() > crate::MAX_SOURCE_BYTES - literal_bytes {
-                                    return Err(error(
-                                        "string literals exceed the source size limit",
-                                    ));
-                                }
-                                literal_bytes += text.len();
+                                limits::consume(
+                                    "semantic literal byte",
+                                    &mut literal_bytes,
+                                    text.len(),
+                                    limits.source_bytes,
+                                )?;
                                 previous_literal = true;
                             }
                             StringPart::Interpolation(value) => {
@@ -392,15 +402,12 @@ impl Expr {
                     if let Self::Let { body, .. } = expr {
                         pending.push((body, depth + 1));
                     }
-                    if bindings.len() > crate::MAX_TOKENS - count {
-                        return Err(error("bindings exceed the node limit"));
-                    }
-                    count += bindings.len();
+                    limits::consume("semantic node", &mut count, bindings.len(), limits.tokens)?;
                     sets.push(bindings);
                     for binding in bindings {
                         match binding {
                             Binding::Assign { path, value } => {
-                                validate_path_length(path.len(), &mut count).map_err(error)?;
+                                validate_path_length(path.len(), &mut count, limits)?;
                                 if local {
                                     let name = path[0].literal_name().ok_or_else(||
                                         error("dynamic attributes are not allowed at the root of let bindings"))?;
@@ -409,8 +416,7 @@ impl Expr {
                                 for (index, name) in path.iter().enumerate() {
                                     match name {
                                         AttrName::Static(name) => {
-                                            validate_attr_name(name, &mut literal_bytes)
-                                                .map_err(error)?;
+                                            validate_attr_name(name, &mut literal_bytes, limits)?;
                                         }
                                         AttrName::Dynamic(key) => {
                                             pending.push((key, depth + index + 1))
@@ -421,12 +427,14 @@ impl Expr {
                                 pending.push((value, depth + path.len()));
                             }
                             Binding::Inherit { source, names } => {
-                                if names.len() > crate::MAX_TOKENS - count {
-                                    return Err(error("inheritance exceeds the node limit"));
-                                }
-                                count += names.len();
+                                limits::consume(
+                                    "semantic node",
+                                    &mut count,
+                                    names.len(),
+                                    limits.tokens,
+                                )?;
                                 for name in names {
-                                    validate_attr_name(name, &mut literal_bytes).map_err(error)?;
+                                    validate_attr_name(name, &mut literal_bytes, limits)?;
                                     if source.is_none() || local {
                                         validate_scoped_name(name).map_err(error)?;
                                     }
@@ -439,11 +447,11 @@ impl Expr {
                     }
                 }
                 Self::Select { value, path, .. } | Self::HasAttr { value, path } => {
-                    validate_path_length(path.len(), &mut count).map_err(error)?;
+                    validate_path_length(path.len(), &mut count, limits)?;
                     for name in path {
                         match name {
                             AttrName::Static(name) => {
-                                validate_attr_name(name, &mut literal_bytes).map_err(error)?;
+                                validate_attr_name(name, &mut literal_bytes, limits)?;
                             }
                             AttrName::Dynamic(key) => pending.push((key, depth + 1)),
                         }
@@ -461,10 +469,12 @@ impl Expr {
                     match parameter {
                         Pattern::Ident(name) => validate_name(name).map_err(error)?,
                         Pattern::AttrSet { fields, bind, .. } => {
-                            if fields.len() > crate::MAX_TOKENS - count {
-                                return Err(error("pattern exceeds the node limit"));
-                            }
-                            count += fields.len();
+                            limits::consume(
+                                "semantic node",
+                                &mut count,
+                                fields.len(),
+                                limits.tokens,
+                            )?;
                             let mut names = std::collections::BTreeSet::new();
                             if let Some(name) = bind {
                                 validate_name(name).map_err(error)?;
@@ -516,26 +526,39 @@ impl Expr {
     }
 }
 
-fn validate_attr_name(name: &str, literal_bytes: &mut usize) -> Result<(), &'static str> {
-    if name.len() > crate::MAX_SOURCE_BYTES - *literal_bytes {
-        return Err("attribute names exceed the source size limit");
-    }
+fn validate_attr_name(
+    name: &str,
+    literal_bytes: &mut usize,
+    limits: Limits,
+) -> Result<(), crate::Diagnostic> {
+    limits::consume(
+        "semantic literal byte",
+        literal_bytes,
+        name.len(),
+        limits.source_bytes,
+    )?;
     if name.contains('\0') {
-        return Err("attribute names cannot contain null bytes");
+        return Err(crate::Diagnostic::new(
+            0..0,
+            "attribute names cannot contain null bytes",
+        ));
     }
-    *literal_bytes += name.len();
     Ok(())
 }
 
-fn validate_path_length(len: usize, count: &mut usize) -> Result<(), &'static str> {
+fn validate_path_length(
+    len: usize,
+    count: &mut usize,
+    limits: Limits,
+) -> Result<(), crate::Diagnostic> {
     if len == 0 {
-        return Err("attribute path must not be empty");
+        return Err(crate::Diagnostic::new(
+            0..0,
+            "attribute path must not be empty",
+        ));
     }
-    if len > crate::MAX_DEPTH || len > crate::MAX_TOKENS - *count {
-        return Err("attribute path exceeds the node or nesting limit");
-    }
-    *count += len;
-    Ok(())
+    limits::check("attribute path depth", len, crate::MAX_DEPTH)?;
+    limits::consume("semantic node", count, len, limits.tokens)
 }
 
 fn validate_bindings(bindings: &[Binding]) -> Result<(), &'static str> {

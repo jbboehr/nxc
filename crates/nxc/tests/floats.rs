@@ -1,3 +1,6 @@
+mod support;
+use support::nxc;
+
 use nxc::{emit, ir::Expr, nix, parse_nxc, syntax};
 use std::{io::ErrorKind, process::Command};
 
@@ -257,7 +260,13 @@ fn float_literals_obey_source_token_depth_and_emitted_byte_limits() {
     let oversized = format!("{exact_size}0");
     assert!(parse_nxc(&oversized).is_err());
     assert!(nix::import(&oversized).is_err());
-    assert!(oversized.parse::<Float>().is_err());
+    // The standalone literal constructor uses the library ceiling, independently
+    // of the smaller conversion budgets used by this boundary fixture.
+    assert!(
+        format!("0.{}", "0".repeat(::nxc::MAX_SOURCE_BYTES))
+            .parse::<Float>()
+            .is_err()
+    );
 
     let exact_tokens = format!("[{}]", "0.0 ".repeat(MAX_TOKENS - 2));
     assert_eq!(

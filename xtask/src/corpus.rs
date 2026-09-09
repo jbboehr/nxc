@@ -227,9 +227,9 @@ fn read_source(path: &Path) -> Result<String, String> {
     file.take((MAX_SOURCE_BYTES + 1) as u64)
         .read_to_end(&mut bytes)
         .map_err(|e| e.to_string())?;
-    if bytes.len() > MAX_SOURCE_BYTES {
-        return Err("source exceeds the 1 MiB limit".into());
-    }
+    nxc::Limits::default()
+        .check_source_bytes(bytes.len())
+        .map_err(|error| error.message)?;
     String::from_utf8(bytes).map_err(|e| format!("input is not UTF-8: {e}"))
 }
 

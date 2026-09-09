@@ -60,12 +60,9 @@ fn run(command: Command) -> Result<(), String> {
         .take((nxc::MAX_SOURCE_BYTES + 1) as u64)
         .read_to_end(&mut bytes)
         .map_err(|e| format!("{}: {e}", file.display()))?;
-    if bytes.len() > nxc::MAX_SOURCE_BYTES {
-        return Err(format!(
-            "{}: source exceeds the 1 MiB limit",
-            file.display()
-        ));
-    }
+    nxc::Limits::default()
+        .check_source_bytes(bytes.len())
+        .map_err(|error| format!("{}: {}", file.display(), error.message))?;
     let source = String::from_utf8(bytes)
         .map_err(|e| format!("{}: input is not UTF-8: {e}", file.display()))?;
     let expr = match command {
@@ -81,12 +78,9 @@ fn run(command: Command) -> Result<(), String> {
     }
     .map_err(|error| diagnostics(file, &source, &[error]))?;
     let converted = format!("{converted}\n");
-    if converted.len() > nxc::MAX_SOURCE_BYTES {
-        return Err(format!(
-            "{}: converted output exceeds the 1 MiB limit",
-            file.display()
-        ));
-    }
+    nxc::Limits::default()
+        .check_source_bytes(converted.len())
+        .map_err(|error| format!("{}: converted output: {}", file.display(), error.message))?;
     // Validate and convert completely before opening the destination.
     if let Some(output) = output {
         fs::write(output, converted).map_err(|e| format!("{}: {e}", output.display()))

@@ -8,7 +8,7 @@ pub mod lexer;
 mod parser;
 pub use kind::{NxcLanguage, SyntaxKind};
 
-use crate::{Diagnostic, MAX_DEPTH, MAX_SOURCE_BYTES, MAX_TOKENS, ir::Expr};
+use crate::{Diagnostic, Limits, MAX_DEPTH, ir::Expr, limits};
 use rowan::ast::AstNode;
 pub type SyntaxNode = rowan::SyntaxNode<NxcLanguage>;
 
@@ -16,6 +16,7 @@ pub type SyntaxNode = rowan::SyntaxNode<NxcLanguage>;
 pub struct Parse {
     green: Option<rowan::GreenNode>,
     diagnostics: Vec<Diagnostic>,
+    limits: Limits,
 }
 
 impl Parse {
@@ -37,7 +38,7 @@ impl Parse {
             .and_then(|root| root.children().find_map(ast::Expression::cast))
             .ok_or_else(|| vec![Diagnostic::new(0..0, "missing expression")])?;
         let lowered = expr.lower(1).map_err(|e| vec![e])?;
-        lowered.validate().map_err(|mut e| {
+        lowered.validate(self.limits).map_err(|mut e| {
             let range = expr.syntax().text_range();
             e.span = usize::from(range.start())..usize::from(range.end());
             vec![e]
@@ -47,13 +48,16 @@ impl Parse {
 }
 
 pub fn parse(source: &str) -> Parse {
-    if source.len() > MAX_SOURCE_BYTES {
+    parse_with_limits(source, Limits::default())
+}
+
+/// Parse with an explicit byte and token/node budget, retaining it for lowering.
+pub fn parse_with_limits(source: &str, limits: Limits) -> Parse {
+    if let Err(error) = limits.check_source_bytes(source.len()) {
         return Parse {
             green: None,
-            diagnostics: vec![Diagnostic::new(
-                0..source.len(),
-                "source exceeds the 1 MiB limit",
-            )],
+            diagnostics: vec![error],
+            limits,
         };
     }
     let tokens = lexer::lex(source);
@@ -80,11 +84,11 @@ pub fn parse(source: &str) -> Parse {
         }
     }
     let mut diagnostics = Vec::new();
-    let node = if count > MAX_TOKENS || peak_depth > MAX_DEPTH {
-        diagnostics.push(Diagnostic::new(
-            0..source.len(),
-            "expression exceeds the token or nesting limit",
-        ));
+    let preflight = limits::check("source token", count, limits.tokens)
+        .and_then(|()| limits::check("delimiter depth", peak_depth, MAX_DEPTH));
+    let node = if let Err(mut error) = preflight {
+        error.span = 0..source.len();
+        diagnostics.push(error);
         None
     } else {
         // Enforce resource bounds before allocating per-token diagnostics.
@@ -99,24 +103,40 @@ pub fn parse(source: &str) -> Parse {
             };
             if let Some(message) = message {
                 diagnostics.push(Diagnostic::new(token.span.clone(), message));
+                if diagnostics.len() == limits::MAX_DIAGNOSTICS {
+                    break;
+                }
             }
         }
-        let (node, errors) = parser::parse(&tokens, source.len());
-        diagnostics.extend(errors);
+        let (node, errors) = if diagnostics.len() < limits::MAX_DIAGNOSTICS {
+            parser::parse(&tokens, source.len())
+        } else {
+            (None, Vec::new())
+        };
+        diagnostics.extend(
+            errors
+                .into_iter()
+                .take(limits::MAX_DIAGNOSTICS - diagnostics.len()),
+        );
         // Canonical output may wrap each semantic operation in parentheses.
-        if node
+        if let Some(depth) = node
             .as_ref()
-            .is_some_and(|node| node.depth() > 2 * MAX_DEPTH)
+            .map(|node| node.depth())
+            .filter(|depth| *depth > 2 * MAX_DEPTH)
         {
-            diagnostics.push(Diagnostic::new(
-                0..source.len(),
-                "expression exceeds the nesting limit",
-            ));
+            let mut error = limits::exceeded("syntax tree depth", depth, 2 * MAX_DEPTH);
+            error.span = 0..source.len();
+            diagnostics.truncate(limits::MAX_DIAGNOSTICS - 1);
+            diagnostics.push(error);
             None
         } else {
             node
         }
     };
     let green = Some(cst::build(source, &tokens, node.as_ref()));
-    Parse { green, diagnostics }
+    Parse {
+        green,
+        diagnostics,
+        limits,
+    }
 }

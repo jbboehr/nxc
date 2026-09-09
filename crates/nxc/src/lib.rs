@@ -4,13 +4,15 @@
 //!
 pub mod emit;
 pub mod ir;
+mod limits;
+pub use limits::Limits;
 pub mod nix;
 mod string;
 pub mod syntax;
 
 /// Resource bounds shared by source parsing, IR validation, and emission.
-pub const MAX_SOURCE_BYTES: usize = 1024 * 1024;
-pub const MAX_TOKENS: usize = 16 * 1024;
+pub const MAX_SOURCE_BYTES: usize = 32 * 1024 * 1024;
+pub const MAX_TOKENS: usize = 4 * 1024 * 1024;
 pub const MAX_DEPTH: usize = 128;
 
 use std::ops::Range;
@@ -33,4 +35,9 @@ impl Diagnostic {
 /// Lower nxc source into a syntax-independent semantic expression.
 pub fn parse_nxc(source: &str) -> Result<ir::Expr, Vec<Diagnostic>> {
     syntax::parse(source).lower()
+}
+
+/// Lower nxc using explicitly selected byte and token/node budgets.
+pub fn parse_nxc_with_limits(source: &str, limits: Limits) -> Result<ir::Expr, Vec<Diagnostic>> {
+    syntax::parse_with_limits(source, limits).lower()
 }
