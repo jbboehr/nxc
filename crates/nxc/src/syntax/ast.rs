@@ -55,7 +55,7 @@ impl Expression {
                 )
             })?;
         }
-        expr.lower_unparenthesized(depth, context)
+        crate::limits::with_stack(|| expr.lower_unparenthesized(depth, context))
     }
 
     fn lower_unparenthesized(

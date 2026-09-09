@@ -181,6 +181,14 @@ fn lower(node: ast::Expr, depth: usize) -> Result<Expr, Diagnostic> {
 }
 
 fn lower_with_string_context(
+    node: ast::Expr,
+    depth: usize,
+    context: StringContext,
+) -> Result<Expr, Diagnostic> {
+    limits::with_stack(|| lower_inner(node, depth, context))
+}
+
+fn lower_inner(
     mut node: ast::Expr,
     depth: usize,
     context: StringContext,

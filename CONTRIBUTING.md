@@ -463,7 +463,7 @@ neither resolved nor rewritten. Unsupported reserved variable names and unknown
 `__nxc_*` forms are rejected in expression positions.
 
 The ceilings in `lib.rs` allow 32 MiB of source, 4,194,304 non-trivia tokens or
-semantic nodes, and 128 levels of nesting. `Limits::new(bytes, tokens)` selects
+semantic nodes, and 256 levels of nesting. `Limits::new(bytes, tokens)` selects
 smaller budgets; it returns `None` above either supported ceiling. Zero is valid
 and rejects any expression requiring that resource. Existing entry points use
 `Limits::default()`. The `*_with_limits` variants accept an explicit budget;
@@ -484,6 +484,11 @@ cost as input capacity grows.
 Temporary nxc grammar trees and native parsed trees are freed iteratively:
 operator chains can exceed the semantic depth limit before lowering rejects them.
 This also covers native parse errors and cloned `nix::Parsed` values.
+Both lowerers use `stacker` (also used by Chumsky) before entering their large
+recursive frames. They check for 64 KiB of remaining stack and allocate a 1 MiB
+segment when needed, on the same thread. The 256-level semantic guard still
+applies. Depth tests exercise parsing, cloned trees, lowering, IR cloning and
+comparison, emission, reparsing, and cleanup on explicitly sized 2 MiB threads.
 Boundary integration tests use small explicit budgets through
 `tests/support/mod.rs`; `capacity.rs`, CLI/corpus tests, and external corpus runs
 exercise the default ceilings. This keeps routine boundary tests independent of

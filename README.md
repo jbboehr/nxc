@@ -376,14 +376,14 @@ generated files should find the same targets. Components may contain ASCII
 letters, digits, `.`, `_`, `-`, and `+`; empty components and interpolation are
 not allowed.
 
-Inputs are currently limited to 32 MiB, 4,194,304 non-trivia tokens, and 128 levels of
+Inputs are currently limited to 32 MiB, 4,194,304 non-trivia tokens, and 256 levels of
 parenthesis, brace, bracket, string, interpolation, or semantic-expression nesting.
 Integer literals range from `0` to `9223372036854775807`; negative values use unary `-`.
 Float overflow and inexact subnormal literals are rejected. Exact subnormal
 values are supported, and their emitted decimal spellings can be long.
 Spellings just below the smallest normal value that round up to it are also
 rejected to avoid depending on native libc's underflow-boundary behavior.
-Attribute paths have at most 128 components, and dotted bindings count toward
+Attribute paths have at most 256 components, and dotted bindings count toward
 semantic nesting. Generated output must fit these limits as well, including the
 CLI's final newline. Limit errors identify the resource, observed count, and
 allowed count. Both frontends return at most 100 diagnostics for malformed input.

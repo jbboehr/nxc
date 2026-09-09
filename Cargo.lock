@@ -354,6 +354,7 @@ dependencies = [
  "proptest",
  "rnix",
  "rowan 0.17.0",
+ "stacker",
 ]
 
 [[package]]

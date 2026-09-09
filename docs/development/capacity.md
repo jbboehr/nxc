@@ -1,7 +1,7 @@
 # Corpus capacity
 
-The byte/token ceiling increase keeps the 128-level nesting guard. It supports
-wide generated files without increasing the recursive lowering depth.
+The initial byte/token ceiling increase kept the 128-level nesting guard. It
+supported wide generated files without increasing recursive lowering depth.
 
 The nixpkgs checkout used for measurement was the pinned source at
 `/nix/store/10lgvzyi60fmfdn0svsifazgwq4kcclh-source`. Its largest rejected file,
@@ -20,6 +20,27 @@ The full run took 27.18 seconds with peak resident memory of 782,084 KiB on
 x86_64 Linux, while workspace tests ran concurrently. These figures describe one
 measurement, not a memory or performance guarantee. The corpus runner parses
 and compares expressions; it does not evaluate nixpkgs or build packages.
+
+The subsequent depth slice raises the shared nesting ceiling to 256. A candidate
+changing only that constant recovered the two files, but overflowed the stack
+during lowering in existing tests on 2 MiB threads. The lowerers now use the
+`stacker` dependency already present through Chumsky to grow the current thread's
+stack when needed. Depth remains bounded; expressions keep their original
+grouping and the emitters keep their existing parenthesization.
+
+The regression cases are long assertion chains from `lib/tests/modules/types.nix`
+and concatenation chains from `pkgs/development/libraries/ffmpeg/generic.nix`.
+Instrumenting IR validation in the disposable candidate measured semantic depths
+of 251 and 131 respectively throughout their round trips.
+Focused tests cover both conversion directions through the 256-level boundary,
+including cloned parsed trees, IR cloning/comparison, and cleanup on 2 MiB
+threads. Native Nix comparisons check assertion failure behavior, list order,
+and lazy list elements on the newly admitted chains.
+
+The full release-build corpus run at depth 256 completed 44,492 of 44,497 round
+trips, leaving only the five `__curPos` files. There were no generated parse/lower
+failures or canonical IR mismatches. This run took 29.05 seconds and peaked at
+783,192 KiB on x86_64 Linux while other verification commands ran concurrently.
 
 Repeat measurements after relevant changes:
 

@@ -51,6 +51,12 @@ impl Limits {
 
 pub(crate) const MAX_DIAGNOSTICS: usize = 100;
 
+// Lowering has larger frames than tree traversal, especially in debug builds.
+// Keep room for the next frame on caller-owned stacks while retaining MAX_DEPTH.
+pub(crate) fn with_stack<R>(f: impl FnOnce() -> R) -> R {
+    stacker::maybe_grow(64 * 1024, 1024 * 1024, f)
+}
+
 pub(crate) fn exceeded(kind: &str, observed: usize, limit: usize) -> Diagnostic {
     Diagnostic::new(
         0..0,

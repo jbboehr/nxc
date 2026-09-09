@@ -13,7 +13,7 @@ pub mod syntax;
 /// Resource bounds shared by source parsing, IR validation, and emission.
 pub const MAX_SOURCE_BYTES: usize = 32 * 1024 * 1024;
 pub const MAX_TOKENS: usize = 4 * 1024 * 1024;
-pub const MAX_DEPTH: usize = 128;
+pub const MAX_DEPTH: usize = 256;
 
 use std::ops::Range;
 
