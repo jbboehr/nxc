@@ -124,7 +124,7 @@ fn invalid_parameters_and_unsupported_lambda_forms_are_rejected_losslessly() {
         "({ x y }) => x",
         "{ x } => x",
         "({ fn }) => 1",
-        "(__curPos) => 1",
+        "(__nxc_unsupported) => 1",
         "(__nxc_x) => 1",
     ] {
         let parsed = syntax::parse(source);
@@ -136,7 +136,7 @@ fn invalid_parameters_and_unsupported_lambda_forms_are_rejected_losslessly() {
         "x@{ x }: x",
         "{ x }@x: x",
         "__nxc_private: 1",
-        "{ __curPos }: 1",
+        "{ __nxc_unsupported }: 1",
     ] {
         assert!(nix::import(source).is_err(), "accepted {source}");
     }

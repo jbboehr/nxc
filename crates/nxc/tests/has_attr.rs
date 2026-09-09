@@ -108,8 +108,8 @@ fn malformed_existence_paths_are_lossless_and_recover_later_items() {
         r#"s ? "${}""#,
         "s ? ''a''",
         "s ? a or t",
-        "s ? ${./path${__curPos}}",
-        "s ? missing.${__curPos}",
+        "s ? ${./path${__nxc_unsupported}}",
+        "s ? missing.${__nxc_unsupported}",
     ] {
         let parsed = syntax::parse(source);
         assert_eq!(parsed.syntax().unwrap().to_string(), source);

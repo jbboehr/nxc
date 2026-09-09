@@ -129,10 +129,10 @@ fn invalid_dynamic_bindings_remain_lossless_and_recover_later_bindings() {
         "{ a.${name}. = 1; }",
         r#"{ "${}" = 1; }"#,
         "{ ''${key}'' = 1; }",
-        "{ ${__curPos} = 1; }",
-        "{ ${./path${__curPos}} = 1; }",
-        "{ ${null} = __curPos; }",
-        "{ ${null}.${__curPos} = 1; }",
+        "{ ${__nxc_unsupported} = 1; }",
+        "{ ${./path${__nxc_unsupported}} = 1; }",
+        "{ ${null} = __nxc_unsupported; }",
+        "{ ${null}.${__nxc_unsupported} = 1; }",
         "{ inherit ${key}; }",
         r#"{ inherit (s) "${key}"; }"#,
     ] {
@@ -146,7 +146,7 @@ fn invalid_dynamic_bindings_remain_lossless_and_recover_later_bindings() {
         r#""${key}""#,
         r#"${if true then "x" else "y"}"#,
         r#"${"or"}"#,
-        r#"${"__curPos"}"#,
+        r#"${"__nxc_unsupported"}"#,
         r#"${"__nxc_update"}"#,
     ] {
         assert!(parse_nxc(&format!("let {{ {name} = 1; yield 2; }}")).is_err());

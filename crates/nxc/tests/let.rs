@@ -216,7 +216,7 @@ fn let_bindings_reject_conflicts_and_reserved_variable_names() {
         "inherit a; a.b = 1;",
         "inherit (src) a a;",
         "or = 1;",
-        "__curPos = 1;",
+        "__nxc_unsupported = 1;",
         "__nxc_private.x = 1;",
         "inherit (src) __nxc_ident_fn;",
         "inherit or;",

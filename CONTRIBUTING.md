@@ -59,6 +59,8 @@ absolute-path spelling, targets independent of file location, and path/division 
 home-path environment changes, verbatim dot components, and pure-mode rejection,
 path interpolation, coercion/context rejection, runtime normalization and lazy imports,
 keyword identifier scope, inheritance, and native function argument keys,
+current-position expressions, generated file/line/column values, inline null,
+and consistency with attribute-definition locations,
 short-circuit Boolean operators, implication normalization, comparison values
 and lazy collection equality,
 shallow attrset updates, operand forcing and lazy overridden attributes,
@@ -132,9 +134,9 @@ failed file, while discovered/selected counts still describe the full selection.
 Discovery errors abort before processing because the file list is incomplete.
 
 Native parse counts include the library's compatibility and resource preflight
-checks. Lowering is counted separately, so valid unsupported forms such as
-`__curPos` references are distinguishable from parse
-failures. Small temporary corpora in the xtask tests exercise reporting and failure handling; no nixpkgs
+checks. Lowering is counted separately, so unsupported reserved forms are
+distinguishable from parse failures. Small temporary corpora in the xtask tests
+exercise reporting and failure handling; no nixpkgs
 checkout is required by the test suite or vendored into this repository.
 
 ## License provenance
@@ -220,7 +222,19 @@ keys, and the shared key emitter quotes `yield` to avoid the nxc let result mark
 This preserves lexical, recursive, inherited, and `with` lookup without scope
 rewriting. Native identifiers using the compatibility spellings remain rejected
 under the prefix reservation, preventing capture of unrelated native variables.
-`or`, `__curPos`, and unknown `__nxc_*` forms remain unsupported as variable names.
+`or` and unknown `__nxc_*` forms remain unsupported as variable names.
+
+`Expr::CurrentPosition` preserves native `__curPos` as an unevaluated expression.
+Both emitters write `__curPos`; neither parser needs a filename or computes a
+position value. Canonical IR compares the operation without source coordinates.
+Native evaluation uses the generated source's file, line, and column, or null
+for inline input. Original-source mapping is outside this syntax-conversion stage.
+The native adapter lowers rnix's `CurPos` node, while the nxc lowerer recognizes
+the spelling in expression positions. `Expr::Variable("__curPos")` remains
+invalid: emitting it would change variable lookup into the position intrinsic.
+Bindings, parameters, keys, and inherited names may be named `__curPos` and
+retain their native roles. In particular, plain inheritance still looks up a
+binding even though a bare expression of the same spelling reads the position.
 
 Lambda IR retains the single parameter, required fields, unevaluated defaults,
 ellipsis, and optional whole-argument binding. Parameter spellings (`fn`,

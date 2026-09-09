@@ -227,6 +227,7 @@ fn lower_inner(
         child(node)
     };
     match node {
+        ast::Expr::CurPos(_) => Ok(Expr::CurrentPosition),
         ast::Expr::Ident(ident) => {
             let name = syntax(&ident).text().to_string();
             ir::validate_name(&name).map_err(error)?;

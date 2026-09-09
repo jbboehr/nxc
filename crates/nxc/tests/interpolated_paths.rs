@@ -99,7 +99,7 @@ fn invalid_interpolated_paths_are_lossless_and_recover_later_items() {
         "./${x} /* gap */ ${y}",
         "./${x}/é",
         "./${x}/a\0",
-        "./${__curPos}",
+        "./${__nxc_unsupported}",
         // Empty literal components remain outside the supported path subset.
         "./a//${x}",
         "./${x}//${y}",

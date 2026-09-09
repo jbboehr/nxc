@@ -214,7 +214,7 @@ fn emitters_reject_invalid_paths_and_bindings_from_callers() {
             recursive: true,
             bindings: vec![Binding::Inherit {
                 source: None,
-                names: vec!["__curPos".into()],
+                names: vec!["__nxc_unsupported".into()],
             }],
         },
     ] {

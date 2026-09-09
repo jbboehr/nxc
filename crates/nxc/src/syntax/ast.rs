@@ -87,6 +87,9 @@ impl Expression {
             K::VariableExpr => {
                 let spelling = self.0.text().to_string();
                 let name = super::ident::decode(&spelling).to_owned();
+                if name == "__curPos" {
+                    return Ok(Expr::CurrentPosition);
+                }
                 ir::validate_name(&name).map_err(error)?;
                 Ok(Expr::Variable(name))
             }

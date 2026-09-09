@@ -27,8 +27,12 @@ fn count(output: &str, label: &str) -> usize {
 fn fixture() -> TempDir {
     let dir = TempDir::new().unwrap();
     fs::create_dir(dir.path().join("nested")).unwrap();
-    fs::write(dir.path().join("00-valid.nix"), "f (1 + 2) x").unwrap();
-    fs::write(dir.path().join("01-unsupported.nix"), "./path${__curPos}").unwrap();
+    fs::write(dir.path().join("00-valid.nix"), "f (1 + 2) x __curPos").unwrap();
+    fs::write(
+        dir.path().join("01-unsupported.nix"),
+        "./path${__nxc_unsupported}",
+    )
+    .unwrap();
     fs::write(dir.path().join("nested/02-invalid.nix"), "f (").unwrap();
     fs::write(dir.path().join("nested/03-valid.nix"), "1 + 2 * 3").unwrap();
     fs::write(dir.path().join("ignored.txt"), "this is not Nix").unwrap();
@@ -268,7 +272,7 @@ fn corpus_is_read_only_and_does_not_invoke_nix_per_file() {
 fn diagnostic_write_failure_exits_without_panicking() {
     let dir = TempDir::new().unwrap();
     let source_path = dir.path().join("unsupported.nix");
-    let source = b"./path${__curPos}";
+    let source = b"./path${__nxc_unsupported}";
     fs::write(&source_path, source).unwrap();
 
     let output = Command::new(env!("CARGO_BIN_EXE_xtask"))

@@ -42,6 +42,17 @@ trips, leaving only the five `__curPos` files. There were no generated parse/low
 failures or canonical IR mismatches. This run took 29.05 seconds and peaked at
 783,192 KiB on x86_64 Linux while other verification commands ran concurrently.
 
+With `__curPos` preserved as a current-position expression, the subsequent
+release-build run completed all 44,497 Nix → nxc → Nix round trips. Every stage
+reported zero failures, including both canonical IR comparisons. This recovers
+the five remaining files without changing the resource limits.
+
+This is structural conversion coverage of the pinned checkout. It does not
+establish that every package evaluates or builds. `__curPos` reads the generated
+Nix source's location; original-source coordinates are not preserved. Focused
+native Nix tests cover file-backed and inline evaluation, lexical bindings,
+inheritance, and consistency with attribute-definition locations.
+
 Repeat measurements after relevant changes:
 
 ```sh
@@ -63,5 +74,5 @@ escaping fit the chosen budget.
 
 Per-file failures identify the first failing stage. Raising a budget can expose
 later unsupported syntax, so rerun the complete corpus rather than counting old
-limit failures as automatically recovered. Source-location behavior such as
-`__curPos` remains a separate compatibility task.
+limit failures as automatically recovered. Mapping generated code back to
+original source locations remains a separate compiler-integration task.

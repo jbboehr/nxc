@@ -129,7 +129,7 @@ fn invalid_aliases_and_duplicate_decoded_parameters_remain_errors() {
         "{ __nxc_ident_yield }: 1",
         "let __nxc_ident_fn = 1; in 1",
         "or",
-        "__curPos",
+        "__nxc_unsupported",
         "{ fn, fn }: 1",
         "yield@{ yield }: 1",
     ] {

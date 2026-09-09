@@ -14,6 +14,8 @@ pub enum Expr {
     Integer(u64),
     Float(Float),
     Variable(String),
+    /// Native `__curPos`, evaluated at its location in the generated Nix source.
+    CurrentPosition,
     /// A literal source-relative path, retaining its spelling without resolution.
     RelativePath(String),
     /// A literal absolute path, retaining its spelling without filesystem access.
@@ -232,13 +234,20 @@ pub(crate) fn validate_bare_attr_name(name: &str) -> Result<(), &'static str> {
 }
 
 pub(crate) fn validate_name(name: &str) -> Result<(), &'static str> {
+    if name == "__curPos" {
+        return Err("current position is not an ordinary variable");
+    }
+    validate_binding_name(name)
+}
+
+fn validate_binding_name(name: &str) -> Result<(), &'static str> {
     validate_bare_attr_name(name)?;
     validate_scoped_name(name)
 }
 
-// Quoting a name may broaden its spelling, but does not unreserve intrinsics.
+// __curPos is special in expression positions, but may name a binding or inherit.
 fn validate_scoped_name(name: &str) -> Result<(), &'static str> {
-    if name.starts_with("__nxc_") || matches!(name, "__curPos" | "or") {
+    if name.starts_with("__nxc_") || name == "or" {
         return Err("reserved form is not supported yet");
     }
     Ok(())
@@ -310,7 +319,7 @@ impl Expr {
                 Self::Integer(value) if *value > i64::MAX as u64 => {
                     return Err(error("integer literal exceeds the Nix signed 64-bit range"));
                 }
-                Self::Integer(_) => {}
+                Self::Integer(_) | Self::CurrentPosition => {}
                 Self::Float(value) => {
                     let bytes = value.to_string().len();
                     limits::consume(
@@ -467,7 +476,7 @@ impl Expr {
                 }
                 Self::Lambda { parameter, body } => {
                     match parameter {
-                        Pattern::Ident(name) => validate_name(name).map_err(error)?,
+                        Pattern::Ident(name) => validate_binding_name(name).map_err(error)?,
                         Pattern::AttrSet { fields, bind, .. } => {
                             limits::consume(
                                 "semantic node",
@@ -477,11 +486,11 @@ impl Expr {
                             )?;
                             let mut names = std::collections::BTreeSet::new();
                             if let Some(name) = bind {
-                                validate_name(name).map_err(error)?;
+                                validate_binding_name(name).map_err(error)?;
                                 names.insert(name.as_str());
                             }
                             for field in fields {
-                                validate_name(&field.name).map_err(error)?;
+                                validate_binding_name(&field.name).map_err(error)?;
                                 if !names.insert(field.name.as_str()) {
                                     return Err(error("duplicate lambda parameter"));
                                 }

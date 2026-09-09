@@ -22,6 +22,7 @@ fn render(expr: &Expr) -> String {
         Expr::Integer(value) => value.to_string(),
         Expr::Float(value) => value.to_string(),
         Expr::Variable(name) => name.clone(),
+        Expr::CurrentPosition => "__curPos".into(),
         // Protect path characters from surrounding unary operators and selections.
         Expr::RelativePath(path)
         | Expr::AbsolutePath(path)

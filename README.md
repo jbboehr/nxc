@@ -13,6 +13,7 @@ with simple or attribute-pattern parameters. Attrsets, attribute selections and
 existence checks, lists, `let`, `with`, `if`, and `assert` expressions,
 double-quoted and indented strings, string interpolation, search paths, and
 relative, absolute, and home-relative paths are also supported.
+Native `__curPos` expressions keep the same spelling in nxc.
 
 For example, `f(1 + 2, x)` converts to native Nix equivalent to `f (1 + 2) x`.
 Conversion preserves the expression's structure and leaves evaluation to Nix.
@@ -174,7 +175,7 @@ once, must be the final item, and needs a semicolon. It does not return early.
 A `let` block is an expression and can appear directly in calls, lists,
 arithmetic, and selections, for example `f(let { yield 1; })` or
 `let { yield { a = 1; }; }.a`. Local bindings can use quoted names too:
-`let { "a b" = 1; yield { inherit "a b"; }; }`. The names `or`, `__curPos`, and
+`let { "a b" = 1; yield { inherit "a b"; }; }`. The names `or` and
 `__nxc_*` remain reserved as local binding keys and in plain inheritance,
 including when quoted.
 The first component of a `let` binding must be a static name, including a direct
@@ -207,6 +208,18 @@ Selections such as `value.fn` and literal keys such as `"__nxc_ident_fn"` keep
 their exact names. Conversion may add quotes around `yield` keys. These
 compatibility spellings are temporary; general escaped-identifier syntax is
 not yet defined.
+
+`__curPos` reports the location where Nix reads the expression. For file input,
+its value has `file`, `line`, and `column` attributes; for example,
+`__curPos.file` gives the filename. Conversion preserves the expression, so its
+value refers to the generated Nix file and coordinates. Reformatting or moving
+that file changes the reported location. The original nxc location is not retained.
+Nix evaluates `__curPos` to `null` for inline input such as `nix-instantiate --expr`.
+
+A local variable or parameter named `__curPos` does not override this expression.
+Attribute names and inheritance retain their ordinary roles:
+`{ __curPos = 7; }.__curPos` evaluates to `7`, and `inherit __curPos;` looks up a
+binding of that name.
 
 Use `with(context, expression)` to make attributes from a context available
 inside an expression:
